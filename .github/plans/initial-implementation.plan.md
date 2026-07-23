@@ -19,6 +19,8 @@ The implementation will be delivered in independently usable milestones. Each mi
 - POC research, design, and security artifacts remain on the issue branch and are included in the implementation pull request.
 - Use GitHub.com and the Agent Tasks API version documented in the requirements. Isolate preview API behavior behind a small client module.
 - Use `GITHUB_TOKEN` for orchestrator-authored state, error, and instruction comments so those comments do not recursively trigger the orchestrator. Only external execution callbacks use the non-`GITHUB_TOKEN` callback identity.
+- Model `Initialization` as canonical sequence-1 state. Because Initialization runs synchronously in the orchestrator (no external worker posts its result), the Initialization handler itself posts the `Initialization -> Research` `autodev-result:v1` handoff using the callback identity, so a follow-up orchestrator run validates the transition and launches Research. It is the only orchestrator state that emits an automated-success result.
+- Agent Tasks must commit to the pre-created issue branch, so Initialization opens a tracking pull request for `autodev/issue-<number>` and Research is launched with both `head_ref` and `base_ref`. The preview API only commits to an existing branch when `head_ref` and `base_ref` are supplied and an open pull request exists for that head/base; `create_pull_request: false` alone does not stop the agent from creating its own branch and pull request.
 - Represent retry exhaustion or executions requiring intervention as canonical `Blocked` state, not only as a label.
 
 ## Planned repository structure
@@ -176,7 +178,8 @@ The exact module split may be collapsed if implementation reveals that a module 
    - Ignore labels other than the configured trigger label.
    - Do nothing if valid canonical state already exists.
    - Create or verify `autodev/issue-<number>`.
-   - Produce the initial canonical transition toward Research.
+   - Seed the issue branch with a scaffold artifact and open the tracking pull request for it.
+   - Record canonical `Initialization` state (sequence 1) with the orchestrator identity, then post the `Initialization -> Research` `autodev-result:v1` handoff with the callback identity so a follow-up orchestrator run launches Research.
 5. [x] Add defense-in-depth event filtering:
    - Ignore canonical `autodev-task` comments as trigger inputs.
    - Ignore comments authored by the orchestrator identity.
@@ -187,7 +190,7 @@ The exact module split may be collapsed if implementation reveals that a module 
 **Completion criteria**
 
 - [x] Repeated trigger-label events create one branch and one logical initialization.
-- [x] The issue contains a valid sequence-1 canonical state record.
+- [x] The issue contains a valid sequence-1 canonical `Initialization` record followed by a callback-identity Research handoff.
 - [x] Duplicate events do not create duplicate branches or state transitions.
 
 ## Milestone 3: Integrate Agent Tasks and complete Research - Implemented
@@ -198,7 +201,7 @@ The exact module split may be collapsed if implementation reveals that a module 
    - `POST /agents/repos/{owner}/{repo}/tasks`
    - `GET /agents/repos/{owner}/{repo}/tasks/{task_id}`
    - Required preview headers and explicit error reporting.
-   - Existing `head_ref`, `custom_agent`, and `create_pull_request: false`. The POC client intentionally does not expose `base_ref` because AutoDev always targets a pre-created branch and must avoid PR-context behavior.
+   - Existing `head_ref`, `custom_agent`, and `create_pull_request: false`, plus `base_ref` so the agent commits to the pre-created issue branch through its open tracking pull request. The preview API ignores `head_ref` supplied on its own (the agent then creates its own `copilot/*` branch and pull request), so AutoDev opens the issue pull request during Initialization and always sends `head_ref` and `base_ref` together.
 2. [x] Keep the Agent Tasks token isolated to the client and workflow environment. Never include it in prompts, branches, artifacts, or agent MCP configuration.
 3. [x] Create `autodev-research.agent.md`:
    - The agent should instruct Copilot to thoroughly research the issue and produce a single artifact at the configured path.
@@ -207,7 +210,7 @@ The exact module split may be collapsed if implementation reveals that a module 
    - Require citations or source links in the research artifact.
    - Require a final structured callback whose branch, SHA, artifact path, and requested next state match the task prompt.
    - Merge the agent definition to the default branch before attempting a live Agent Task, because cloud custom-agent resolution uses repository-visible/default-branch agent definitions.
-4. [x] Launch Research with a deterministic prompt containing issue context, branch/ref expectations, artifact path, allowed paths, and callback contract. Record the returned Agent Task ID in the new Research `autodev-task` comment.
+4. [x] Launch Research from the follow-up run triggered by the Initialization handoff, using a deterministic prompt containing issue context, branch/ref expectations, artifact path, allowed paths, and callback contract. Record the returned Agent Task ID in the new Research `autodev-task` comment.
 5. [x] Authenticate and parse Research callback comments, then stop cleanly at the deferred Design boundary. Design-state processing will validate the Agent Task, branch, SHA, changed files, and artifact in Milestone 4.
 6. [x] Add integration-style tests using mocked Agent Tasks and GitHub API responses.
 

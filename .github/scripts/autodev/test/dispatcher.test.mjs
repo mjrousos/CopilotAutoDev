@@ -202,3 +202,98 @@ test('valid results for later milestones determine the state but defer its handl
   assert.equal(result.state, STATES.IMPLEMENTATION);
   assert.equal(github.comments.length, 0);
 });
+
+function createHandoffComment() {
+  return formatVersionedMarker(RESULT_MARKER, {
+    schemaVersion: SCHEMA_VERSION,
+    issue: 42,
+    state: STATES.INITIALIZATION,
+    attempt: 1,
+    outcome: RESULT_OUTCOMES.SUCCESS,
+    nextState: STATES.RESEARCH,
+    decisionRationale: 'Branch and pull request are ready.',
+    headRef: 'autodev/issue-42',
+    headSha: SHA,
+    artifacts: [],
+  });
+}
+
+test('the initialization handoff result requests the research state', () => {
+  assert.equal(determineState({
+    eventName: 'issue_comment',
+    eventPayload: {
+      issue: { number: 42 },
+      comment: {
+        body: createHandoffComment(),
+        user: { login: 'autodev-callback' },
+        author_association: 'NONE',
+      },
+    },
+    issueNumber: 42,
+    callbackLogin: 'autodev-callback',
+  }).state, STATES.RESEARCH);
+});
+
+test('an initialization handoff result launches Research in the follow-up run', async () => {
+  const comments = [{
+    id: 1,
+    body: formatTaskComment({
+      schemaVersion: SCHEMA_VERSION,
+      issue: 42,
+      sequence: 1,
+      state: STATES.INITIALIZATION,
+      executionId: null,
+      attempt: 1,
+      headRef: 'autodev/issue-42',
+      headSha: SHA,
+      createdAt: '2026-07-22T17:00:00Z',
+    }),
+    user: { login: DEFAULT_ORCHESTRATOR_LOGIN },
+  }];
+  const started = [];
+  const github = {
+    async getIssueComments() {
+      return comments;
+    },
+    async getRef() {
+      return { object: { sha: SHA } };
+    },
+    async getRepository() {
+      return { default_branch: 'main' };
+    },
+    async getIssue() {
+      return { title: 'Issue', body: 'Body', html_url: 'https://example.test/42' };
+    },
+    async createIssueComment(_issueNumber, body) {
+      comments.push({ id: comments.length + 1, body, user: { login: DEFAULT_ORCHESTRATOR_LOGIN } });
+      return { id: comments.length, body };
+    },
+  };
+  const agentTasks = {
+    async startTask(request) {
+      started.push(request);
+      return { id: 'task-r', state: 'queued', html_url: 'https://example.test/task-r' };
+    },
+  };
+
+  const result = await dispatchAutoDevEvent({
+    github,
+    agentTasks,
+    eventName: 'issue_comment',
+    eventPayload: {
+      issue: { number: 42 },
+      comment: {
+        body: createHandoffComment(),
+        user: { login: 'autodev-callback' },
+        author_association: 'NONE',
+      },
+    },
+    issueNumber: 42,
+    callbackLogin: 'autodev-callback',
+  });
+
+  assert.equal(result.status, 'research-started');
+  assert.equal(started.length, 1);
+  assert.equal(started[0].baseRef, 'main');
+  assert.equal(started[0].headRef, 'autodev/issue-42');
+});

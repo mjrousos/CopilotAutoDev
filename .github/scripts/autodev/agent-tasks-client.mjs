@@ -135,6 +135,7 @@ export class AgentTasksClient {
   async startTask({
     prompt,
     headRef,
+    baseRef,
     customAgent,
     model,
   }) {
@@ -152,6 +153,12 @@ export class AgentTasksClient {
       custom_agent: customAgent,
       create_pull_request: false,
     };
+    // Supplying base_ref together with head_ref makes the agent commit to the
+    // existing issue branch/pull request instead of creating its own branch.
+    if (baseRef !== undefined) {
+      assertNonEmptyString(baseRef, 'baseRef');
+      body.base_ref = baseRef;
+    }
     if (model !== undefined) {
       assertNonEmptyString(model, 'model');
       body.model = model;

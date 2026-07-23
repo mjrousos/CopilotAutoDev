@@ -7,7 +7,7 @@ import {
   SCHEMA_VERSION,
   STATES,
   getStateHandler,
-  isExternalExecutionState,
+  isAutomatedSuccessState,
   isState,
 } from './config.mjs';
 import { normalizeRepositoryPath } from './validation.mjs';
@@ -200,7 +200,7 @@ export function validateResultRecord(value, expectedIssueNumber) {
   const artifacts = validateArtifacts(value.artifacts);
 
   if (value.outcome === RESULT_OUTCOMES.SUCCESS) {
-    if (!isExternalExecutionState(value.state)) {
+    if (!isAutomatedSuccessState(value.state)) {
       throw new ContractValidationError(
         'invalid-automated-state',
         `State ${value.state} does not accept automated success results.`,
@@ -229,6 +229,15 @@ export function validateResultRecord(value, expectedIssueNumber) {
 export function parseResultComment(body, expectedIssueNumber) {
   const value = extractVersionedMarker(body, RESULT_MARKER);
   return value === null ? null : validateResultRecord(value, expectedIssueNumber);
+}
+
+export function formatResultComment(result, summary = 'AutoDev result') {
+  const validatedResult = validateResultRecord(result);
+  if (typeof summary !== 'string' || summary.trim().length === 0) {
+    throw new ContractValidationError('invalid-summary', 'summary must be a non-empty string.');
+  }
+
+  return `${summary.trim()}\n\n${formatVersionedMarker(RESULT_MARKER, validatedResult)}`;
 }
 
 export function validateDecisionRecord(value) {

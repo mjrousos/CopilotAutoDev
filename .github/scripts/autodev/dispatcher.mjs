@@ -15,6 +15,7 @@ import {
 } from './task.mjs';
 import { isTrustedHumanComment } from './validation.mjs';
 import { initializeIssue } from './handlers/initialization.mjs';
+import { advanceToResearch } from './handlers/research.mjs';
 
 export const INVALID_STATE = 'invalid';
 
@@ -85,6 +86,7 @@ export function determineState({
 export async function dispatchAutoDevEvent({
   github,
   agentTasks,
+  callbackGithub,
   eventName,
   eventPayload,
   issueNumber,
@@ -110,9 +112,20 @@ export async function dispatchAutoDevEvent({
       case STATES.INITIALIZATION:
         return initializeIssue({
           github,
+          callbackGithub,
+          issueNumber,
+          orchestratorLogin,
+          now,
+        });
+      case STATES.RESEARCH:
+        // Reached only from a validated Initialization -> Research handoff
+        // result; the label and dispatch paths always resolve to Initialization.
+        return advanceToResearch({
+          github,
           agentTasks,
           issueNumber,
           orchestratorLogin,
+          result: determination.result,
           now,
         });
       default:

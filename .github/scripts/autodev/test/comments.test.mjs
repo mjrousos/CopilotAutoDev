@@ -7,6 +7,7 @@ import {
   RESULT_MARKER,
   RESULT_OUTCOMES,
   formatDecisionBlock,
+  formatResultComment,
   formatVersionedMarker,
   parseDecisionBlock,
   parseResultComment,
@@ -51,6 +52,39 @@ test('human results use the same marker with human outcomes', () => {
   });
 
   assert.deepEqual(parseResultComment(formatResult(result), 42), result);
+});
+
+test('initialization posts an automated success handoff to research', () => {
+  const result = createResult({
+    state: STATES.INITIALIZATION,
+    nextState: STATES.RESEARCH,
+    decisionRationale: 'Branch and pull request are ready.',
+    artifacts: [],
+  });
+
+  assert.deepEqual(parseResultComment(formatResult(result), 42), result);
+});
+
+test('success results are rejected for states that are not automated-success states', () => {
+  assert.throws(
+    () => validateResultRecord(createResult({
+      state: STATES.HUMAN_PLAN_REVIEW,
+      nextState: STATES.IMPLEMENTATION,
+      artifacts: [],
+    })),
+    (error) => error instanceof ContractValidationError && error.code === 'invalid-automated-state',
+  );
+});
+
+test('formatResultComment renders a visible summary with one parseable marker', () => {
+  const result = createResult();
+  const comment = formatResultComment(result, '### Research complete');
+  assert.match(comment, /### Research complete/);
+  assert.deepEqual(parseResultComment(comment, 42), result);
+  assert.throws(
+    () => formatResultComment(result, '   '),
+    (error) => error instanceof ContractValidationError && error.code === 'invalid-summary',
+  );
 });
 
 test('retry is accepted only for blocked state', () => {

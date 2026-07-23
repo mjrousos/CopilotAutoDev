@@ -2,13 +2,53 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { STATES } from '../config.mjs';
 import {
+  DEFAULT_ORCHESTRATOR_LOGIN,
+  SCHEMA_VERSION,
+  STATES,
+} from '../config.mjs';
+import { ContractValidationError, RESULT_OUTCOMES } from '../comments.mjs';
+import { formatTaskComment } from '../task.mjs';
+import {
+  advanceToResearch,
   buildResearchPrompt,
   startResearch,
 } from '../handlers/research.mjs';
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
+
+function initializationComment(headSha = SHA) {
+  return {
+    id: 1,
+    body: formatTaskComment({
+      schemaVersion: SCHEMA_VERSION,
+      issue: 42,
+      sequence: 1,
+      state: STATES.INITIALIZATION,
+      executionId: null,
+      attempt: 1,
+      headRef: 'autodev/issue-42',
+      headSha,
+      createdAt: '2026-07-22T17:00:00Z',
+    }),
+    user: { login: DEFAULT_ORCHESTRATOR_LOGIN },
+  };
+}
+
+function handoffResult(headSha = SHA) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    issue: 42,
+    state: STATES.INITIALIZATION,
+    attempt: 1,
+    outcome: RESULT_OUTCOMES.SUCCESS,
+    nextState: STATES.RESEARCH,
+    decisionRationale: 'Branch and pull request are ready.',
+    headRef: 'autodev/issue-42',
+    headSha,
+    artifacts: [],
+  };
+}
 
 test('Research agent supports explicit Agent Tasks API selection', async () => {
   const profile = await readFile(
@@ -112,4 +152,121 @@ test('startResearch can customize the visible Initialization heading', async () 
 
   assert.equal(result.status, 'research-started');
   assert.match(comments[0], /### AutoDev initialized; Research started/);
+});
+
+test('advanceToResearch validates the handoff and launches Research on the issue branch', async () => {
+  const comments = [initializationComment()];
+  const posted = [];
+  let startRequest;
+  const github = {
+    async getIssueComments() {
+      return comments;
+    },
+    async getRef(ref) {
+      assert.equal(ref, 'heads/autodev/issue-42');
+      return { ref: `refs/${ref}`, object: { sha: SHA } };
+    },
+    async getRepository() {
+      return { default_branch: 'main' };
+    },
+    async getIssue() {
+      return { title: 'Issue', body: 'Body', html_url: 'https://example.test/42' };
+    },
+    async createIssueComment(_issueNumber, body) {
+      posted.push(body);
+      return { id: comments.length + posted.length, body };
+    },
+  };
+  const agentTasks = {
+    async startTask(request) {
+      startRequest = request;
+      return { id: 'task-r', state: 'queued', html_url: 'https://example.test/task-r' };
+    },
+  };
+
+  const result = await advanceToResearch({
+    github,
+    agentTasks,
+    issueNumber: 42,
+    result: handoffResult(),
+    now: () => new Date('2026-07-23T12:00:00Z'),
+  });
+
+  assert.equal(result.status, 'research-started');
+  assert.equal(result.task.sequence, 2);
+  assert.equal(result.task.state, STATES.RESEARCH);
+  assert.equal(result.task.headSha, SHA);
+  assert.equal(startRequest.baseRef, 'main');
+  assert.equal(startRequest.headRef, 'autodev/issue-42');
+});
+
+test('advanceToResearch rejects a handoff when the branch head drifted', async () => {
+  const comments = [initializationComment()];
+  const github = {
+    async getIssueComments() {
+      return comments;
+    },
+    async getRef() {
+      return { object: { sha: '1111111111111111111111111111111111111111' } };
+    },
+    async getRepository() {
+      throw new Error('must reject before reading the repository');
+    },
+  };
+  const agentTasks = {
+    async startTask() {
+      throw new Error('Research must not start from a drifted head');
+    },
+  };
+
+  await assert.rejects(
+    advanceToResearch({
+      github,
+      agentTasks,
+      issueNumber: 42,
+      result: handoffResult(),
+    }),
+    (error) => error instanceof ContractValidationError && error.code === 'stale-head-sha',
+  );
+});
+
+test('advanceToResearch ignores handoffs once Research has already started', async () => {
+  const comments = [
+    initializationComment(),
+    {
+      id: 2,
+      body: formatTaskComment({
+        schemaVersion: SCHEMA_VERSION,
+        issue: 42,
+        sequence: 2,
+        state: STATES.RESEARCH,
+        executionId: 'task-existing',
+        attempt: 1,
+        headRef: 'autodev/issue-42',
+        headSha: SHA,
+        createdAt: '2026-07-23T12:00:00Z',
+      }),
+      user: { login: DEFAULT_ORCHESTRATOR_LOGIN },
+    },
+  ];
+  const github = {
+    async getIssueComments() {
+      return comments;
+    },
+  };
+  const agentTasks = {
+    async startTask() {
+      throw new Error('Research must not start again');
+    },
+  };
+
+  const result = await advanceToResearch({
+    github,
+    agentTasks,
+    issueNumber: 42,
+    result: handoffResult(),
+  });
+
+  assert.equal(result.status, 'ignored');
+  assert.equal(result.reason, 'research-already-started');
 });

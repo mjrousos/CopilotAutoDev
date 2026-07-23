@@ -209,6 +209,79 @@ export class GitHubClient {
     return this.updateRef(refName, expectedSha);
   }
 
+  contentsPath(path) {
+    const encoded = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+    return this.repositoryPath(`/contents/${encoded}`);
+  }
+
+  async getContent(path, ref) {
+    assertNonEmptyString(path, 'path');
+    const response = await this.request('GET', this.contentsPath(path), {
+      query: ref ? { ref } : undefined,
+      allowNotFound: true,
+    });
+    return response?.data ?? null;
+  }
+
+  async createOrUpdateFile({ path, message, content, branch }) {
+    assertNonEmptyString(path, 'path');
+    assertNonEmptyString(message, 'message');
+    assertNonEmptyString(branch, 'branch');
+    if (typeof content !== 'string') {
+      throw new TypeError('content must be a string.');
+    }
+
+    // Reuse the existing blob SHA when the placeholder already exists so a
+    // retried Initialization updates it in place instead of failing.
+    const existing = await this.getContent(path, branch);
+    const body = {
+      message,
+      content: Buffer.from(content, 'utf8').toString('base64'),
+      branch,
+    };
+    if (existing && typeof existing.sha === 'string') {
+      body.sha = existing.sha;
+    }
+
+    const response = await this.request('PUT', this.contentsPath(path), { body });
+    return response.data;
+  }
+
+  async findPullRequest({ head, base }) {
+    assertNonEmptyString(head, 'head');
+    assertNonEmptyString(base, 'base');
+    const response = await this.request('GET', this.repositoryPath('/pulls'), {
+      query: { head: `${this.owner}:${head}`, base, state: 'open' },
+    });
+    if (!Array.isArray(response.data)) {
+      throw new GitHubApiError({
+        method: 'GET',
+        path: this.repositoryPath('/pulls'),
+        status: 502,
+        responseBody: { message: 'Expected an array of pull requests.' },
+      });
+    }
+    return response.data[0] ?? null;
+  }
+
+  async createPullRequest({ title, head, base, body }) {
+    assertNonEmptyString(title, 'title');
+    assertNonEmptyString(head, 'head');
+    assertNonEmptyString(base, 'base');
+    const response = await this.request('POST', this.repositoryPath('/pulls'), {
+      body: { title, head, base, body: body ?? '' },
+    });
+    return response.data;
+  }
+
+  async ensurePullRequest({ title, head, base, body }) {
+    const existing = await this.findPullRequest({ head, base });
+    if (existing) {
+      return existing;
+    }
+    return this.createPullRequest({ title, head, base, body });
+  }
+
   async getIssueComments(issueNumber) {
     assertIssueNumber(issueNumber);
     const comments = [];

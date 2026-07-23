@@ -80,6 +80,7 @@ export async function run({
   const result = await dispatchAutoDevEvent({
     github,
     agentTasks,
+    callbackGithub,
     eventName: env.GITHUB_EVENT_NAME,
     eventPayload,
     issueNumber,
