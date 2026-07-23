@@ -6,7 +6,7 @@ Proposed. This plan covers a single reversible spike: re-implement the **Researc
 
 ## Problem and approach
 
-AutoDev launches its autonomous states as Copilot Agent Tasks through the public-preview Agent Tasks REST API. Research repeatedly completed with no commit and no callback, ending with messages such as *"nothing actionable in the prompt"* and *"No actionable new @copilot comments were provided, so I didn't make any changes or post any replies."*
+AutoDev launches its autonomous states as Copilot Agent Tasks through the public-preview Agent Tasks REST API. The research task repeatedly completed with no commit and no callback, ending with messages such as *"nothing actionable in the prompt"* and *"No actionable new @copilot comments were provided, so I didn't make any changes or post any replies."*
 
 The Agent Tasks API is the wrong execution primitive for AutoDev's model, and the recommended replacement is gh-aw, which AutoDev already uses for CodeReview. This plan documents that rationale and lays out the spike to prove it on the Research state before committing to a broader migration.
 
@@ -69,7 +69,7 @@ Running the Copilot CLI headless as an orchestrator step is the most controllabl
    - Read-only GitHub context (repos and issues toolsets) plus web search for external research.
    - Local file `edit` so the agent can write the research artifact into the checked-out workspace.
    - No direct GitHub write tools; all writes go through safe outputs.
-3. Author the workflow prompt body from the existing `buildResearchPrompt` content: issue title/body/URL as untrusted data, working branch, required artifact path, attempt, and the exact `autodev-result:v1` callback contract (state `research`, nextState `design`, matching `headRef`/`headSha`/`artifacts`).
+3. Author the workflow prompt body from the existing `buildResearchPrompt` content and autodev-research.agent.md: issue title/body/URL as untrusted data, working branch, required artifact path, attempt, and the exact `autodev-result:v1` callback contract (state `research`, nextState `design`, matching `headRef`/`headSha`/`artifacts`).
 4. Configure narrow safe outputs, confirming exact names and syntax via the `agentic-workflows` skill:
    - Commit the artifact to the issue branch through `push-to-pull-request-branch` (or the equivalent branch-push safe output), targeting the pull request/branch derived from the dispatch inputs. Because a `workflow_dispatch` run has no implicit PR target, set an explicit target and require it to exactly match the sanitized `head_ref`/PR input.
    - Post the `autodev-result:v1` callback via `add-comment` to `issue_number`, using the callback identity, and include the `correlation_id` so a missed callback can later be reconciled.
