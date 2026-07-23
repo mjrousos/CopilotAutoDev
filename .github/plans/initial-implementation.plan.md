@@ -166,7 +166,7 @@ The exact module split may be collapsed if implementation reveals that a module 
    - `issue_comment: [created]` for automated and human-authored result comments.
    - `workflow_dispatch` inputs for issue number and reconciliation/manual reruns.
    - One normalized issue-number expression shared by all triggers, including a coalesce over `github.event.issue.number` and `workflow_dispatch` input, and one per-issue concurrency group derived from that normalized value.
-   - Explicit least-privilege `issues` and `contents` permissions required by Initialization.
+   - Explicit least-privilege `issues`, `contents`, and `pull-requests` permissions required by Initialization, which now opens the issue tracking pull request.
 2. [x] Pin a Node LTS version that supports built-in `fetch` and `node:test`, check out the default branch, and run `main.mjs` with normalized event data supplied through environment variables or the GitHub event JSON path.
 3. [x] Implement a small GitHub REST client using Node's built-in `fetch`:
    - Read issue comments with pagination.
