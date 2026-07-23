@@ -282,6 +282,20 @@ export class GitHubClient {
     return this.createPullRequest({ title, head, base, body });
   }
 
+  async dispatchWorkflow(workflowFileName, ref, inputs = {}) {
+    assertNonEmptyString(workflowFileName, 'workflowFileName');
+    assertNonEmptyString(ref, 'ref');
+    if (inputs === null || typeof inputs !== 'object' || Array.isArray(inputs)) {
+      throw new TypeError('inputs must be an object.');
+    }
+    // The dispatch endpoint returns 204 No Content on success.
+    await this.request(
+      'POST',
+      this.repositoryPath(`/actions/workflows/${encodeURIComponent(workflowFileName)}/dispatches`),
+      { body: { ref, inputs } },
+    );
+  }
+
   async getIssueComments(issueNumber) {
     assertIssueNumber(issueNumber);
     const comments = [];

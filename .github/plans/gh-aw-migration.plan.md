@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. This plan covers a single reversible spike: re-implement the **Research** state as a GitHub Agentic Workflow (gh-aw) instead of a Copilot Agent Task. It does not change any other state. If the spike succeeds, a follow-on plan will migrate Design, SecurityReview, and Implementation and retire the Agent Tasks client.
+In progress. Phases 1–4 (author, compile, wire, test) are implemented on branch `spike/gh-aw-research`. Phase 5 (live validation) is pending: it requires merging the workflow and wiring to the default branch and labeling a fresh test issue, then observing the runs. This plan covers a single reversible spike: re-implement the **Research** state as a GitHub Agentic Workflow (gh-aw) instead of a Copilot Agent Task. It does not change any other state. If the spike succeeds, a follow-on plan will migrate Design, SecurityReview, and Implementation and retire the Agent Tasks client.
 
 ## Problem and approach
 
@@ -85,20 +85,22 @@ Running the Copilot CLI headless as an orchestrator step is the most controllabl
 
 ### Phase 3: Wire the orchestrator to dispatch the workflow
 
-1. In `config.mjs`, change the Research handler mapping from `AGENT_TASK` to `AGENTIC_WORKFLOW`, and add any Research-specific workflow file name/dispatch constants. Keep all state, transition, label, and change-policy definitions in `config.mjs`.
-2. Add a minimal `dispatchWorkflow` operation to `github-client.mjs` (`POST /repos/{owner}/{repo}/actions/workflows/{workflow}/dispatches`) only now that a state uses it. Add `actions: write` to the orchestrator workflow permissions at the same time.
+1. In `config.mjs`, add the Research workflow file constant (`WORKFLOWS[research] = 'autodev-research.lock.yml'`). **Implementation note:** do NOT remap the Research handler to `AGENTIC_WORKFLOW`. That handler type enforces an unchanged `headSha` (correct for read-only CodeReview), but Research advances the branch. Research keeps `AGENT_TASK` transition semantics; only its launch mechanism changes. Handler type (transition semantics) is intentionally decoupled from launch substrate (workflow dispatch).
+2. Add a minimal `dispatchWorkflow` operation to `github-client.mjs` (`POST /repos/{owner}/{repo}/actions/workflows/{workflow}/dispatches`, 204 No Content) only now that a state uses it. Add `actions: write` to the orchestrator workflow permissions at the same time.
 3. Replace the Agent Task launch inside `advanceToResearch` (`handlers/research.mjs`) with a workflow dispatch:
    - Preserve the existing canonical guards: load canonical state, require `Initialization`, validate the transition, and re-fetch the live branch head and reject on `stale-head-sha`.
-   - Generate the `correlation_id`, dispatch the workflow with the inputs above, and record a canonical Research `autodev-task` comment whose `executionId` is the `correlation_id` (workflow_dispatch does not return a run ID).
-4. Keep the callback path unchanged: the orchestrator continues to accept a callback-identity `autodev-result:v1` comment and validate it with the existing transition validator, including the changed-files check against the preceding canonical `headSha`.
+   - Resolve the tracking pull request number via the existing `findPullRequest(headRef, defaultBranch)` and reject with `missing-tracking-pull-request` if absent (the push-to-pull-request-branch safe output targets it).
+   - Generate the `correlation_id`, dispatch the workflow on the default branch with string-typed inputs (issue number, head ref, head SHA, pull request number, artifact path, attempt, correlation id), and record a canonical Research `autodev-task` comment whose `executionId` is the `correlation_id` (workflow_dispatch does not return a run ID).
+   - `startResearch` (the Agent Task launcher) is retained but no longer called, per the reversibility rule.
+4. Keep the callback path unchanged: the orchestrator continues to accept a callback-identity `autodev-result:v1` comment and validate it with the existing transition validator.
+   - **Known limitation (documented risk):** the gh-aw worker commits through a later safe-outputs job, so it cannot report the post-commit head SHA in its callback. For the spike the callback echoes the pre-dispatch `head_sha`; the research→design transition does not require SHA equality for `AGENT_TASK`, so this passes. When Design lands, the orchestrator must re-resolve the actual branch head on callback rather than trusting the reported SHA.
 
 ### Phase 4: Tests
 
 1. Update and add focused `node:test` coverage under `.github/scripts/autodev/test/`:
    - `dispatchWorkflow` request shape, path encoding, and error handling in `github-client.test.mjs`.
-   - `advanceToResearch` dispatches the workflow with correctly derived inputs, records the `correlation_id` as `executionId`, and still enforces the stale-head and transition guards.
-   - `config.test.mjs` reflects the Research handler now mapping to `AGENTIC_WORKFLOW`.
-   - Add a guard asserting the compiled `autodev-research.lock.yml` exists and that the source declares the callback safe output.
+   - `advanceToResearch` dispatches the workflow with correctly derived inputs, records the `correlation_id` as `executionId`, blocks when no tracking pull request exists, and still enforces the stale-head and transition guards.
+   - A guard asserting the compiled `autodev-research.lock.yml` exists and that the source declares the push and callback safe outputs and the `autodev-result:v1` contract.
 2. Run the full suite: `node --test .github/scripts/autodev/test/*.test.mjs`.
 
 ### Phase 5: Live validation

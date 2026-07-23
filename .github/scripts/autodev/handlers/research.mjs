@@ -1,10 +1,14 @@
-// Starts the Research Agent Task and records the returned platform task ID in
-// the canonical autodev-task comment.
+// Launches the Research state. The follow-up orchestrator run dispatches the
+// autodev-research Agentic Workflow (the worker), which commits the artifact and
+// posts the callback. startResearch (the legacy Agent Task launcher) is retained
+// for reversibility during the gh-aw migration spike.
+import { randomUUID } from 'node:crypto';
 import {
   CUSTOM_AGENTS,
   DEFAULT_ORCHESTRATOR_LOGIN,
   SCHEMA_VERSION,
   STATES,
+  WORKFLOWS,
   getArtifactPath,
 } from '../config.mjs';
 import { ContractValidationError } from '../comments.mjs';
@@ -106,13 +110,15 @@ export async function startResearch({
 
 // Runs in the follow-up orchestrator execution triggered by the Initialization
 // handoff result. It validates the Initialization -> Research transition against
-// canonical state, then launches Research on the shared issue branch.
+// canonical state, then dispatches the Research Agentic Workflow to run on the
+// shared issue branch's tracking pull request.
 export async function advanceToResearch({
   github,
-  agentTasks,
   issueNumber,
   orchestratorLogin = DEFAULT_ORCHESTRATOR_LOGIN,
   result,
+  dispatchRef,
+  correlationId = randomUUID(),
   now = () => new Date(),
 }) {
   const canonical = await loadCanonicalTask({
@@ -152,23 +158,70 @@ export async function advanceToResearch({
   }
 
   const repository = await github.getRepository();
-  const baseRef = repository.default_branch;
-  if (typeof baseRef !== 'string' || baseRef.length === 0) {
+  const defaultBranch = repository.default_branch;
+  if (typeof defaultBranch !== 'string' || defaultBranch.length === 0) {
     throw new ContractValidationError(
       'missing-default-branch',
       'Repository metadata does not contain a default branch.',
     );
   }
 
-  return startResearch({
-    github,
-    agentTasks,
-    issueNumber,
+  // The Agentic Workflow commits through the push-to-pull-request-branch safe
+  // output, which targets the issue branch's tracking pull request.
+  const pullRequest = await github.findPullRequest({
+    head: currentTask.headRef,
+    base: defaultBranch,
+  });
+  if (!pullRequest || !Number.isSafeInteger(pullRequest.number)) {
+    throw new ContractValidationError(
+      'missing-tracking-pull-request',
+      `No open tracking pull request found for ${currentTask.headRef}.`,
+    );
+  }
+
+  const attempt = 1;
+  const artifactPath = getArtifactPath(STATES.RESEARCH, issueNumber);
+  await github.dispatchWorkflow(
+    WORKFLOWS[STATES.RESEARCH],
+    dispatchRef ?? defaultBranch,
+    {
+      issue_number: String(issueNumber),
+      head_ref: currentTask.headRef,
+      head_sha: currentTask.headSha,
+      pull_request_number: String(pullRequest.number),
+      artifact_path: artifactPath,
+      attempt: String(attempt),
+      correlation_id: correlationId,
+    },
+  );
+
+  // workflow_dispatch does not return a run ID, so the caller-generated
+  // correlation ID is the canonical executionId. Reconciliation correlates on it.
+  const task = {
+    schemaVersion: SCHEMA_VERSION,
+    issue: issueNumber,
+    sequence: currentTask.sequence + 1,
+    state: STATES.RESEARCH,
+    executionId: correlationId,
+    attempt,
     headRef: currentTask.headRef,
     headSha: currentTask.headSha,
-    baseRef,
-    sequence: currentTask.sequence + 1,
-    attempt: 1,
-    now,
+    createdAt: now().toISOString(),
+  };
+  const comment = await github.createIssueComment(
+    issueNumber,
+    formatTaskComment(
+      task,
+      `### AutoDev Research started\n\nDispatched \`${WORKFLOWS[STATES.RESEARCH]}\` for \`${currentTask.headRef}\` `
+        + `(correlation \`${correlationId}\`).`,
+    ),
+  );
+
+  return Object.freeze({
+    status: 'research-started',
+    task: Object.freeze(task),
+    pullRequest,
+    correlationId,
+    comment,
   });
 }

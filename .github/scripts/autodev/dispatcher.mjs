@@ -122,7 +122,6 @@ export async function dispatchAutoDevEvent({
         // result; the label and dispatch paths always resolve to Initialization.
         return advanceToResearch({
           github,
-          agentTasks,
           issueNumber,
           orchestratorLogin,
           result: determination.result,

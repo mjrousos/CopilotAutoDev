@@ -82,6 +82,13 @@ export const CUSTOM_AGENTS = Object.freeze({
   [STATES.RESEARCH]: 'autodev-research',
 });
 
+// Compiled Agentic Workflow lock files the orchestrator dispatches per state.
+// The launch mechanism (workflow dispatch) is independent of the state's
+// transition semantics, which remain defined by STATE_HANDLERS.
+export const WORKFLOWS = Object.freeze({
+  [STATES.RESEARCH]: 'autodev-research.lock.yml',
+});
+
 const ARTIFACT_FILE_NAMES = Object.freeze({
   [STATES.RESEARCH]: 'research.md',
   [STATES.DESIGN]: 'design.md',

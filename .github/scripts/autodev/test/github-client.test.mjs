@@ -228,6 +228,34 @@ test('ensurePullRequest opens a pull request when none is open', async () => {
   });
 });
 
+test('dispatchWorkflow posts ref and inputs to the workflow dispatch endpoint', async () => {
+  let request;
+  const client = createClient(async (url, options) => {
+    request = { url: url.toString(), method: options.method, body: options.body };
+    return new Response(null, { status: 204 });
+  });
+
+  await client.dispatchWorkflow('autodev-research.lock.yml', 'main', {
+    issue_number: '42',
+    head_ref: 'autodev/issue-42',
+  });
+
+  assert.match(request.url, /\/actions\/workflows\/autodev-research\.lock\.yml\/dispatches$/);
+  assert.equal(request.method, 'POST');
+  assert.deepEqual(JSON.parse(request.body), {
+    ref: 'main',
+    inputs: { issue_number: '42', head_ref: 'autodev/issue-42' },
+  });
+});
+
+test('dispatchWorkflow rejects non-object inputs', async () => {
+  const client = createClient(async () => new Response(null, { status: 204 }));
+  await assert.rejects(
+    client.dispatchWorkflow('wf.lock.yml', 'main', ['not', 'an', 'object']),
+    /inputs must be an object/,
+  );
+});
+
 test('issue comments use the configured authorization token', async () => {
   let authorization;
   const client = createClient(async (_url, options) => {
