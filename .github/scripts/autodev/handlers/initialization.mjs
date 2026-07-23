@@ -1,5 +1,5 @@
-// Idempotent Initialization handler. It creates the issue branch and publishes
-// the first canonical task snapshot; Milestone 3 will replace the dry-run task.
+// Idempotent Initialization handler. It creates the issue branch, launches the
+// Research Agent Task, and publishes the first canonical task snapshot.
 import {
   DEFAULT_ORCHESTRATOR_LOGIN,
   getIssueBranch,

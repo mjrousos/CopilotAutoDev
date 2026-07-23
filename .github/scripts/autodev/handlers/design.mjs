@@ -12,8 +12,6 @@ import { validateTransitionRequest } from '../transitions.mjs';
 import { findDisallowedPaths } from '../validation.mjs';
 import { loadCanonicalTask } from './shared.mjs';
 
-const CALLBACK_TASK_STATES = Object.freeze(['in_progress', 'idle', 'completed']);
-
 function taskTargetsBranch(task, headRef) {
   const branchArtifactMatches = task.artifacts?.some(
     (artifact) => artifact.type === 'branch' && artifact.data?.head_ref === headRef,
@@ -46,7 +44,7 @@ export async function enterDesign({
   }
 
   const execution = await agentTasks.getTask(currentTask.executionId);
-  if (!CALLBACK_TASK_STATES.includes(execution.state)) {
+  if (execution.state !== 'completed') {
     throw new ContractValidationError(
       'invalid-agent-task-state',
       `Research task ${execution.id} cannot complete from state ${execution.state}.`,

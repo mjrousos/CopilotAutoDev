@@ -35,26 +35,7 @@ Research attempt: ${attempt}
 Working branch: ${headRef}
 Required artifact: ${artifactPath}
 
-Research the issue thoroughly using relevant repository context, current external documentation, and authoritative sources. Write a detailed research report to exactly ${artifactPath}. Include source links or citations. Do not modify any other file.
-
-After the artifact is committed to ${headRef}, retrieve the branch head SHA and add a comment to issue #${issueNumber} using the add_issue_comment tool. Include a short visible summary followed by exactly one marker with this shape:
-
-<!-- autodev-result:v1
-{
-  "schemaVersion": 1,
-  "issue": ${issueNumber},
-  "state": "research",
-  "attempt": ${attempt},
-  "outcome": "success",
-  "nextState": "design",
-  "decisionRationale": "Explain briefly why research is complete.",
-  "headRef": "${headRef}",
-  "headSha": "<committed branch head SHA>",
-  "artifacts": ["${artifactPath}"]
-}
--->
-
-The callback comment is required and must be the final GitHub write performed by this task.`;
+Follow the Research procedure and autodev-result:v1 schema in your custom-agent instructions. For the callback, use issue ${issueNumber}, attempt ${attempt}, state research, nextState design, headRef ${headRef}, and artifacts ["${artifactPath}"].`;
 }
 
 export async function startResearch({

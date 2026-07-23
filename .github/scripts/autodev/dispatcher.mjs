@@ -73,7 +73,7 @@ export function determineState({
   } else if (
     typeof callbackLogin !== 'string'
     || callbackLogin.length === 0
-    || comment.user?.login !== callbackLogin
+    || comment.user?.login?.toLowerCase() !== callbackLogin.toLowerCase()
   ) {
     return Object.freeze({ state: INVALID_STATE, reason: 'untrusted-automated-result' });
   }

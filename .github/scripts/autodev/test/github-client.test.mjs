@@ -116,6 +116,15 @@ test('issue comments use the configured authorization token', async () => {
   assert.equal(authorization, 'Bearer test-token');
 });
 
+test('authenticated user login is resolved from the configured token', async () => {
+  const client = createClient(async (url) => {
+    assert.equal(url.pathname, '/user');
+    return jsonResponse({ login: 'callback-user' });
+  });
+
+  assert.equal((await client.getAuthenticatedUser()).login, 'callback-user');
+});
+
 test('compareCommits and getContent expose validation data', async () => {
   const client = createClient(async (url) => {
     if (url.pathname.includes('/compare/')) {

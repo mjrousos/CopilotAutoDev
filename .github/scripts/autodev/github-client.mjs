@@ -143,6 +143,19 @@ export class GitHubClient {
     return response.data;
   }
 
+  async getAuthenticatedUser() {
+    const response = await this.request('GET', '/user');
+    if (typeof response.data?.login !== 'string' || response.data.login.length === 0) {
+      throw new GitHubApiError({
+        method: 'GET',
+        path: '/user',
+        status: 502,
+        responseBody: { message: 'Expected the authenticated GitHub user login.' },
+      });
+    }
+    return response.data;
+  }
+
   async getRef(ref) {
     assertNonEmptyString(ref, 'ref');
     const response = await this.request(

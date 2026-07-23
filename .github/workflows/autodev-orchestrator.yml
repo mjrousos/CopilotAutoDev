@@ -67,7 +67,7 @@ jobs:
         if: ${{ steps.authorize.outputs.allowed == 'true' }}
         env:
           AUTODEV_AGENT_TASKS_TOKEN: ${{ secrets.AUTODEV_AGENT_TASKS_TOKEN }}
-          AUTODEV_CALLBACK_LOGIN: ${{ vars.AUTODEV_CALLBACK_LOGIN }}
+          AUTODEV_CALLBACK_TOKEN: ${{ secrets.AUTODEV_CALLBACK_TOKEN }}
           AUTODEV_GITHUB_TOKEN: ${{ github.token }}
           AUTODEV_ORCHESTRATOR_LOGIN: github-actions[bot]
           INPUT_ISSUE_NUMBER: ${{ inputs.issue_number || '' }}

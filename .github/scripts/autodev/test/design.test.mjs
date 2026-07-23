@@ -175,3 +175,16 @@ test('Research result must correspond to the recorded Agent Task branch', async 
       && error.code === 'agent-task-branch-mismatch',
   );
 });
+
+test('Research result waits for the Agent Task to be completed', async () => {
+  await assert.rejects(
+    enterDesign({
+      github: createGitHub(),
+      agentTasks: createAgentTasks({ state: 'in_progress' }),
+      issueNumber: 42,
+      result: createResult(),
+    }),
+    (error) => error instanceof ContractValidationError
+      && error.code === 'invalid-agent-task-state',
+  );
+});

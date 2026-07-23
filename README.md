@@ -29,9 +29,7 @@ The Agent Tasks API supports fine-grained PATs and GitHub App user access tokens
 
 The callback PAT has repository-level `Issues: write`, not a comment-only token scope. For this POC, the MCP and Agentic Workflow tool allowlists provide the narrower `add_issue_comment` boundary. Never use the Agent Tasks token as a callback token, and never expose it to an agent.
 
-The orchestrator must use `GITHUB_TOKEN` for its own comments. Events caused by this token do not recursively start another workflow. External execution callbacks use the callback PAT so that their comments do trigger the orchestrator.
-
-Create a repository Actions variable named `AUTODEV_CALLBACK_LOGIN` containing the GitHub login that owns `AUTODEV_CALLBACK_TOKEN`. The orchestrator accepts automated result comments only from this login.
+The orchestrator must use `GITHUB_TOKEN` for its own comments. Events caused by this token do not recursively start another workflow. External execution callbacks use the callback PAT so that their comments do trigger the orchestrator. At startup, the orchestrator calls the authenticated-user endpoint with `AUTODEV_CALLBACK_TOKEN` and accepts automated result comments only from the returned login.
 
 ## Configure Copilot MCP access
 
@@ -108,12 +106,11 @@ node --test .github/scripts/autodev/test/task.test.mjs
 ## Validate setup
 
 1. Confirm the Actions secrets `AUTODEV_AGENT_TASKS_TOKEN` and `AUTODEV_CALLBACK_TOKEN` exist.
-2. Confirm the Actions variable `AUTODEV_CALLBACK_LOGIN` matches the callback PAT owner.
-3. Confirm the Agents secret `COPILOT_MCP_GITHUB_PERSONAL_ACCESS_TOKEN` exists.
-4. Assign a temporary issue to Copilot and inspect **View session > Start MCP Servers**:
+2. Confirm the Agents secret `COPILOT_MCP_GITHUB_PERSONAL_ACCESS_TOKEN` exists.
+3. Assign a temporary issue to Copilot and inspect **View session > Start MCP Servers**:
    - The read-only connection exposes only expected read/search tools.
    - The callback connection exposes `add_issue_comment` and no other write tool.
-5. Use the Agent Tasks token to call the repository task-list endpoint and confirm it returns successfully without printing the token:
+4. Use the Agent Tasks token to call the repository task-list endpoint and confirm it returns successfully without printing the token:
 
    ```powershell
    $env:GH_TOKEN = '<load from a secure secret store>'
@@ -123,8 +120,8 @@ node --test .github/scripts/autodev/test/task.test.mjs
    Remove-Item Env:\GH_TOKEN
    ```
 
-6. Run `gh aw --version` and confirm it matches the version pinned in `copilot-setup-steps.yml`.
-7. Run `gh aw compile --validate` after the CodeReview source workflow is added.
+5. Run `gh aw --version` and confirm it matches the version pinned in `copilot-setup-steps.yml`.
+6. Run `gh aw compile --validate` after the CodeReview source workflow is added.
 
 ## Rotate credentials
 

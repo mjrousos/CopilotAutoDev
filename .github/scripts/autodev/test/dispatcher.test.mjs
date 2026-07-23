@@ -149,7 +149,7 @@ test('automated results require the configured callback identity', () => {
     eventName: 'issue_comment',
     eventPayload,
     issueNumber: 42,
-    callbackLogin: 'callback-user',
+    callbackLogin: 'CALLBACK-USER',
   }).state, STATES.DESIGN);
 
   assert.equal(determineState({
