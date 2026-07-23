@@ -16,23 +16,21 @@ The AutoDev workflow will move through the following states. Each state will be 
 - Implementation: In this state, the AutoDev workflow's Implementation agent will use the approved design plan to implement the solution on the issue's working branch. The agent will report its result to the issue but will not create a pull request. After validating the agent's result, the orchestrator will create or reuse a pull request from the working branch to the default branch and transition to CodeReview.
 - CodeReview: In this state, a GitHub Agentic Workflow will review the pull request for code quality, adherence to the design plan, and potential issues. It will use safe outputs to add advisory findings to the pull request. If changes are required, it will request a transition to Implementation. If no blocking findings are identified, it will request a transition to HumanCodeReview. The automated review does not count as human approval.
 - HumanCodeReview: A trusted human reviewer will review the pull request. If changes are required, the reviewer will add a structured result comment requesting changes and the orchestrator will transition to Implementation. If the pull request is acceptable, the reviewer will merge it manually and add an approval result referencing the reviewed head commit. The orchestrator will verify that the pull request was merged and transition to Completed.
-- Blocked: The orchestrator will transition an automated state to Blocked when bounded recovery is exhausted, an execution is waiting for user input, or recovery would require guessing. A trusted reviewer may submit a retry decision, which returns the workflow to the state recorded as `fromState` in the transition that entered Blocked.
+- Blocked: The orchestrator will transition an automated state to Blocked when bounded recovery is exhausted, an execution is waiting for user input, or recovery would require guessing. A trusted reviewer may submit a retry decision, which returns the workflow to the most recent task state preceding Blocked.
 - Completed: This is the terminal state. The implementation pull request has been merged and no further automated execution is launched.
 
 ## Important Implementation Details
 
-- Canonical workflow state will be tracked as an append-only sequence of orchestrator-authored GitHub issue comments. Each canonical comment will contain a visible summary and a versioned HTML comment with a full transition record using the following schema:
+- Canonical workflow state will be tracked as an append-only sequence of orchestrator-authored GitHub issue comments. Each canonical comment will contain a visible summary and a versioned HTML comment describing the current task or human state:
 
   ```text
-  <!-- autodev-state:v1
+  <!-- autodev-task:v1
   {
     "schemaVersion": 1,
     "issue": 42,
     "sequence": 5,
-    "fromState": "research",
-    "nextState": "design",
-    "sourceExecutionId": "research-task-id",
-    "nextExecutionId": "design-task-id",
+    "state": "design",
+    "executionId": "design-task-id",
     "attempt": 1,
     "headRef": "autodev/issue-42",
     "headSha": "abc123",
@@ -41,11 +39,11 @@ The AutoDev workflow will move through the following states. Each state will be 
   -->
   ```
 
-  - For the initial proof of concept, a separate status field will not be used. The `nextState` in the valid record with the highest sequence number is the effective current state of the AutoDev workflow.
-  - `sourceExecutionId` identifies the execution whose result caused the transition. `nextExecutionId` identifies the execution launched for `nextState`. Either value may be null when the transition is not caused by an automated execution or the next state does not require one, such as a human-review or terminal state.
-  - The execution mechanism is fixed for each state and will not be stored separately in the state record. The orchestrator will use `fromState` and `nextState` to determine whether an execution ID refers to an Agent Task, an Agentic Workflow run or correlation ID, or another configured handler.
-  - Agent callbacks and human comments may request a transition, but they are not canonical state records. The orchestrator must verify the actor, validate that `fromState` to `nextState` is an allowed transition, launch the next task when required, and then append the canonical transition record.
-  - Duplicate sequence numbers, invalid schemas, issue-number mismatches, invalid transitions, and records not authored by the orchestrator will be ignored or reported as errors.
+  - The `state` in the valid record with the highest contiguous sequence number is the effective current state of the AutoDev workflow.
+  - `executionId` is the platform task ID or workflow correlation ID recorded by the orchestrator when it launches work. It is null for human-review, Blocked, Completed, or dry-run states.
+  - The execution mechanism is fixed for each state and is derived from `state`; it is not stored separately.
+  - Agent callbacks and human comments request transitions but are not canonical records. The orchestrator validates the request against the latest task, launches the requested task when required, and then appends a new current-task record.
+  - Duplicate sequence numbers, sequence gaps, invalid schemas, issue-number mismatches, and records not authored by the orchestrator will be ignored or reported as errors.
   - GitHub labels may mirror the current state for visibility and discovery, but they will not be treated as authoritative state because they can be modified independently.
 - Automated executions and human reviewers will request transitions using the same structured result comment:
 
@@ -55,7 +53,6 @@ The AutoDev workflow will move through the following states. Each state will be 
     "schemaVersion": 1,
     "issue": 42,
     "state": "research",
-    "executionId": "research-task-id",
     "attempt": 1,
     "outcome": "success",
     "nextState": "design",
@@ -68,10 +65,10 @@ The AutoDev workflow will move through the following states. Each state will be 
   ```
 
   - Agent Task agents, the CodeReview Agentic Workflow, trusted human reviewers, and future local Copilot review tools may write result comments, but only the orchestrator may convert a result into canonical state.
-  - The orchestrator will validate the callback identity, current state, execution ID, attempt, requested transition, branch, commit, artifacts, and files changed since the preceding canonical `headSha`.
+  - The orchestrator will validate the callback identity, current state, attempt, requested transition, branch, commit, artifacts, and files changed since the current task's `headSha`. For automated states it queries the platform task identified by the current task record's `executionId`.
   - Design and SecurityReview will also persist their selected `nextState` and rationale in their committed artifacts so a missed callback can be recovered without guessing.
-  - For automated executions, `executionId` is required and `outcome` is `success` when requesting a normal transition.
-  - For human-authored results, `executionId` may be null or a local-tool correlation ID, `artifacts` may be empty, and `outcome` is `approved`, `changes-requested`, or `retry`. The current `state`, requested `nextState`, `headRef`, `headSha`, and rationale remain required.
+  - For automated executions, `outcome` is `success` when requesting a normal transition.
+  - For human-authored results, `artifacts` may be empty and `outcome` is `approved`, `changes-requested`, or `retry`. The current `state`, requested `nextState`, `headRef`, `headSha`, and rationale remain required.
   - Human-authored results will be accepted only when the comment author's `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR` and the referenced `headSha` is still current.
   - The orchestrator workflow will process only newly created issue comments. Edited or deleted comments will not create, modify, or reverse transitions in the proof of concept.
 - There will be a primary GitHub Actions workflow backed by an orchestrator script that will be responsible for managing the state machine and invoking the configured handler for each state. Most automated states will be implemented as custom *.agent.md files under .github/agents and invoked using the [GitHub Task REST API](https://docs.github.com/en/rest/agent-tasks/agent-tasks?apiVersion=2026-03-10#start-a-task). To demonstrate both approaches in the proof of concept, CodeReview will instead be implemented as a GitHub Agentic Workflow. The state handlers will be:

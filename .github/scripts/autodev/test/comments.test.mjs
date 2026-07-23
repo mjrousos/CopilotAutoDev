@@ -1,0 +1,117 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { SCHEMA_VERSION, STATES } from '../config.mjs';
+import {
+  ContractValidationError,
+  RESULT_MARKER,
+  RESULT_OUTCOMES,
+  formatDecisionBlock,
+  formatVersionedMarker,
+  parseDecisionBlock,
+  parseResultComment,
+  validateResultRecord,
+} from '../comments.mjs';
+
+const SHA = '0123456789abcdef0123456789abcdef01234567';
+
+function createResult(overrides = {}) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    issue: 42,
+    state: STATES.RESEARCH,
+    attempt: 1,
+    outcome: RESULT_OUTCOMES.SUCCESS,
+    nextState: STATES.DESIGN,
+    decisionRationale: 'Research is complete.',
+    headRef: 'autodev/issue-42',
+    headSha: SHA,
+    artifacts: ['.github/autodev/issues/42/research.md'],
+    ...overrides,
+  };
+}
+
+function formatResult(result) {
+  return formatVersionedMarker(RESULT_MARKER, result);
+}
+
+test('automated result comments round-trip', () => {
+  const result = createResult();
+  const comment = formatResult(result);
+  assert.deepEqual(parseResultComment(comment, 42), result);
+});
+
+test('human results use the same marker with human outcomes', () => {
+  const result = createResult({
+    state: STATES.HUMAN_PLAN_REVIEW,
+    outcome: RESULT_OUTCOMES.APPROVED,
+    nextState: STATES.IMPLEMENTATION,
+    decisionRationale: 'The plan is approved.',
+    artifacts: [],
+  });
+
+  assert.deepEqual(parseResultComment(formatResult(result), 42), result);
+});
+
+test('retry is accepted only for blocked state', () => {
+  assert.throws(
+    () => validateResultRecord(createResult({
+      outcome: RESULT_OUTCOMES.RETRY,
+    })),
+    (error) => error instanceof ContractValidationError && error.code === 'invalid-retry-state',
+  );
+
+  assert.doesNotThrow(() => validateResultRecord(createResult({
+    state: STATES.BLOCKED,
+    outcome: RESULT_OUTCOMES.RETRY,
+    nextState: STATES.DESIGN,
+    artifacts: [],
+  })));
+});
+
+test('result validation rejects malformed contracts', () => {
+  assert.throws(
+    () => validateResultRecord({ ...createResult(), extra: true }),
+    (error) => error instanceof ContractValidationError && error.code === 'invalid-fields',
+  );
+  assert.throws(
+    () => validateResultRecord(createResult({ headSha: 'not-a-sha' })),
+    (error) => error instanceof ContractValidationError && error.code === 'invalid-sha',
+  );
+  assert.throws(
+    () => validateResultRecord(createResult({ artifacts: ['../secret.txt'] })),
+    (error) => error instanceof ContractValidationError && error.code === 'invalid-artifact-path',
+  );
+});
+
+test('result parser rejects unknown marker versions and invalid JSON', () => {
+  assert.throws(
+    () => parseResultComment('<!-- autodev-result:v2\n{}\n-->', 42),
+    (error) => error instanceof ContractValidationError
+      && error.code === 'unsupported-marker-version',
+  );
+  assert.throws(
+    () => parseResultComment('<!-- autodev-result:v1\n{broken}\n-->', 42),
+    (error) => error instanceof ContractValidationError && error.code === 'invalid-json',
+  );
+});
+
+test('decision blocks round-trip and are limited to decision states', () => {
+  const decision = {
+    schemaVersion: SCHEMA_VERSION,
+    state: STATES.DESIGN,
+    nextState: STATES.SECURITY_REVIEW,
+    decisionRationale: 'The plan is ready for security review.',
+  };
+  assert.deepEqual(parseDecisionBlock(formatDecisionBlock(decision)), decision);
+
+  assert.throws(
+    () => formatDecisionBlock({ ...decision, state: STATES.RESEARCH }),
+    (error) => error instanceof ContractValidationError && error.code === 'invalid-decision-state',
+  );
+  assert.throws(
+    () => formatDecisionBlock({ ...decision, nextState: STATES.COMPLETED }),
+    (error) => error instanceof ContractValidationError
+      && error.code === 'invalid-decision-transition',
+  );
+});
