@@ -177,6 +177,17 @@ export class GitHubClient {
     return response.data;
   }
 
+  async updateRef(ref, sha, { force = false } = {}) {
+    assertNonEmptyString(ref, 'ref');
+    assertNonEmptyString(sha, 'sha');
+    const response = await this.request(
+      'PATCH',
+      this.repositoryPath(`/git/refs/${encodeURIComponent(ref)}`),
+      { body: { sha, force } },
+    );
+    return response.data;
+  }
+
   async createOrVerifyBranch(branchName, expectedSha) {
     assertNonEmptyString(branchName, 'branchName');
     assertNonEmptyString(expectedSha, 'expectedSha');
@@ -187,20 +198,15 @@ export class GitHubClient {
     }
 
     const actualSha = existing.object?.sha;
-    // Reusing a branch based on a different commit could attach AutoDev to
-    // unrelated work, so a mismatch is an explicit conflict rather than a reset.
-    if (actualSha !== expectedSha) {
-      throw new GitHubApiError({
-        method: 'VERIFY',
-        path: this.repositoryPath(`/git/ref/${encodeURIComponent(refName)}`),
-        status: 409,
-        responseBody: {
-          message: `Branch ${branchName} points to ${String(actualSha)}, expected ${expectedSha}.`,
-        },
-      });
+    if (actualSha === expectedSha) {
+      return existing;
     }
 
-    return existing;
+    // A previous Initialization attempt may have created the branch before
+    // failing to record canonical task metadata. Move such a stale branch to
+    // the current base only through a non-force update, which GitHub rejects if
+    // the branch contains unique work or otherwise cannot be fast-forwarded.
+    return this.updateRef(refName, expectedSha);
   }
 
   async getIssueComments(issueNumber) {

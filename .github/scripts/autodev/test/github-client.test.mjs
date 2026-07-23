@@ -71,7 +71,7 @@ test('missing issue branch is created from the expected SHA', async () => {
   });
 });
 
-test('existing issue branch is reused only when it matches the expected SHA', async () => {
+test('existing issue branch is reused when it matches the expected SHA', async () => {
   const matchingClient = createClient(async () => jsonResponse({
     ref: 'refs/heads/autodev/issue-42',
     object: { sha: SHA },
@@ -80,14 +80,49 @@ test('existing issue branch is reused only when it matches the expected SHA', as
     (await matchingClient.createOrVerifyBranch('autodev/issue-42', SHA)).object.sha,
     SHA,
   );
+});
 
-  const conflictingClient = createClient(async () => jsonResponse({
-    ref: 'refs/heads/autodev/issue-42',
-    object: { sha: '89abcdef0123456789abcdef0123456789abcdef' },
-  }));
+test('stale issue branch is advanced with a non-force update', async () => {
+  const requests = [];
+  const client = createClient(async (_url, options) => {
+    requests.push(options);
+    if (options.method === 'GET') {
+      return jsonResponse({
+        ref: 'refs/heads/autodev/issue-42',
+        object: { sha: '89abcdef0123456789abcdef0123456789abcdef' },
+      });
+    }
+    return jsonResponse({
+      ref: 'refs/heads/autodev/issue-42',
+      object: { sha: SHA },
+    });
+  });
+
+  assert.equal(
+    (await client.createOrVerifyBranch('autodev/issue-42', SHA)).object.sha,
+    SHA,
+  );
+  assert.equal(requests[1].method, 'PATCH');
+  assert.deepEqual(JSON.parse(requests[1].body), {
+    sha: SHA,
+    force: false,
+  });
+});
+
+test('issue branch with unique work cannot be force-reset', async () => {
+  const conflictingClient = createClient(async (_url, options) => {
+    if (options.method === 'GET') {
+      return jsonResponse({
+        ref: 'refs/heads/autodev/issue-42',
+        object: { sha: '89abcdef0123456789abcdef0123456789abcdef' },
+      });
+    }
+    return jsonResponse({ message: 'Reference update failed' }, { status: 422 });
+  });
+
   await assert.rejects(
     conflictingClient.createOrVerifyBranch('autodev/issue-42', SHA),
-    (error) => error instanceof GitHubApiError && error.status === 409,
+    (error) => error instanceof GitHubApiError && error.status === 422,
   );
 });
 
