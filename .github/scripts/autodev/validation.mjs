@@ -21,13 +21,21 @@ export function normalizeRepositoryPath(filePath) {
     throw new TypeError('Repository path must be a non-empty string.');
   }
 
-  const normalized = filePath.replaceAll('\\', '/').replace(/^\.\//, '');
+  const slashNormalized = filePath.replaceAll('\\', '/');
   if (
-    normalized.startsWith('/')
-    || /^[A-Za-z]:\//.test(normalized)
-    || normalized.split('/').includes('..')
+    slashNormalized.startsWith('/')
+    || /^[A-Za-z]:\//.test(slashNormalized)
+    || slashNormalized.split('/').includes('..')
   ) {
     throw new TypeError(`Repository path must be relative and cannot traverse: ${filePath}`);
+  }
+
+  const normalized = slashNormalized
+    .split('/')
+    .filter((segment) => segment.length > 0 && segment !== '.')
+    .join('/');
+  if (normalized.length === 0) {
+    throw new TypeError('Repository path must contain a file or directory name.');
   }
 
   return normalized;

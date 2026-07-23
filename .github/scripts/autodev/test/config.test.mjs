@@ -96,6 +96,18 @@ test('implementation policy protects AutoDev control files and approved artifact
 
 test('repository paths reject traversal and normalize separators', () => {
   assert.equal(normalizeRepositoryPath('.\\src\\app.js'), 'src/app.js');
+  assert.equal(
+    normalizeRepositoryPath('././.github//scripts/./autodev/task.mjs'),
+    '.github/scripts/autodev/task.mjs',
+  );
+  assert.equal(
+    isPathAllowedForState(
+      STATES.IMPLEMENTATION,
+      42,
+      '././.github/scripts/./autodev/task.mjs',
+    ),
+    false,
+  );
   assert.throws(() => normalizeRepositoryPath('../secret.txt'), /cannot traverse/);
   assert.throws(() => normalizeRepositoryPath('C:\\secret.txt'), /must be relative/);
 });
