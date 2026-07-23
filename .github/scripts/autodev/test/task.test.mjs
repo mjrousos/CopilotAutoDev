@@ -69,10 +69,10 @@ test('task validation rejects schema, issue, state, execution, and timestamp err
 
 test('highest valid orchestrator-authored task sequence is selected', () => {
   const comments = [
-    createComment(1, createTask()),
+    createComment(1, createTask({ state: STATES.INITIALIZATION, executionId: null })),
     createComment(2, createTask({
       sequence: 2,
-      state: STATES.DESIGN,
+      state: STATES.RESEARCH,
       executionId: 'task-456',
     })),
     createComment(3, createTask({ sequence: 9 }), 'untrusted-user'),
@@ -84,9 +84,24 @@ test('highest valid orchestrator-authored task sequence is selected', () => {
   assert.deepEqual(selection.errors.map((error) => error.code), ['unauthorized-task-author']);
 });
 
+test('canonical history must begin with Initialization', () => {
+  const researchGenesis = selectCanonicalTask(
+    [createComment(1, createTask())],
+    { issueNumber: 42, isOrchestrator },
+  );
+  assert.equal(researchGenesis.task, null);
+  assert.deepEqual(researchGenesis.errors.map((error) => error.code), ['invalid-task-history']);
+
+  const initializationGenesis = selectCanonicalTask(
+    [createComment(1, createTask({ state: STATES.INITIALIZATION, executionId: null }))],
+    { issueNumber: 42, isOrchestrator },
+  );
+  assert.equal(initializationGenesis.task.state, STATES.INITIALIZATION);
+});
+
 test('duplicate sequences are excluded and reported', () => {
   const comments = [
-    createComment(1, createTask()),
+    createComment(1, createTask({ state: STATES.INITIALIZATION, executionId: null })),
     createComment(2, createTask({ sequence: 2, state: STATES.DESIGN })),
     createComment(3, createTask({
       sequence: 2,
@@ -116,7 +131,7 @@ test('malformed and wrong-issue task comments are ignored with errors', () => {
 
 test('canonical selection rejects sequence gaps', () => {
   const comments = [
-    createComment(1, createTask()),
+    createComment(1, createTask({ state: STATES.INITIALIZATION, executionId: null })),
     createComment(2, createTask({
       sequence: 3,
       state: STATES.SECURITY_REVIEW,
@@ -130,7 +145,7 @@ test('canonical selection rejects sequence gaps', () => {
 
 test('canonical selection retains task history for recovery decisions', () => {
   const comments = [
-    createComment(1, createTask()),
+    createComment(1, createTask({ state: STATES.INITIALIZATION, executionId: null })),
     createComment(2, createTask({
       sequence: 2,
       state: STATES.DESIGN,
@@ -152,6 +167,6 @@ test('canonical selection retains task history for recovery decisions', () => {
   assert.equal(selection.task.sequence, 4);
   assert.deepEqual(
     selection.history.map((task) => task.state),
-    [STATES.RESEARCH, STATES.DESIGN, STATES.BLOCKED, STATES.RESEARCH],
+    [STATES.INITIALIZATION, STATES.DESIGN, STATES.BLOCKED, STATES.RESEARCH],
   );
 });

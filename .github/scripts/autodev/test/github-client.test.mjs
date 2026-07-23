@@ -140,6 +140,94 @@ test('GitHub API failures preserve status and response body', async () => {
   );
 });
 
+test('createOrUpdateFile seeds a new file without a blob SHA', async () => {
+  const requests = [];
+  const client = createClient(async (url, options) => {
+    requests.push({ url: url.toString(), options });
+    if (options.method === 'GET') {
+      return jsonResponse({ message: 'Not Found' }, { status: 404 });
+    }
+    return jsonResponse(
+      { content: { path: '.github/autodev/issues/42/README.md' }, commit: { sha: SHA } },
+      { status: 201 },
+    );
+  });
+
+  const result = await client.createOrUpdateFile({
+    path: '.github/autodev/issues/42/README.md',
+    message: 'seed',
+    content: '# hello',
+    branch: 'autodev/issue-42',
+  });
+
+  assert.equal(result.commit.sha, SHA);
+  assert.match(requests[0].url, /contents\/\.github\/autodev\/issues\/42\/README\.md/);
+  assert.equal(requests[1].options.method, 'PUT');
+  const putBody = JSON.parse(requests[1].options.body);
+  assert.equal(putBody.branch, 'autodev/issue-42');
+  assert.equal(putBody.sha, undefined);
+  assert.equal(Buffer.from(putBody.content, 'base64').toString('utf8'), '# hello');
+});
+
+test('createOrUpdateFile reuses the existing blob SHA when the file is present', async () => {
+  const requests = [];
+  const client = createClient(async (_url, options) => {
+    requests.push(options);
+    if (options.method === 'GET') {
+      return jsonResponse({ sha: 'existing-blob-sha', path: 'a/b.md' });
+    }
+    return jsonResponse({ commit: { sha: SHA } });
+  });
+
+  await client.createOrUpdateFile({
+    path: 'a/b.md', message: 'update', content: 'body', branch: 'autodev/issue-42',
+  });
+
+  assert.equal(JSON.parse(requests[1].body).sha, 'existing-blob-sha');
+});
+
+test('ensurePullRequest reuses an open pull request when one exists', async () => {
+  const requests = [];
+  const client = createClient(async (url, options) => {
+    requests.push({ url: url.toString(), method: options.method });
+    if (options.method === 'GET') {
+      return jsonResponse([{ number: 7, html_url: 'https://example.test/pull/7' }]);
+    }
+    throw new Error('ensurePullRequest should not open a new pull request');
+  });
+
+  const pr = await client.ensurePullRequest({
+    title: 'AutoDev: Test', head: 'autodev/issue-42', base: 'main',
+  });
+
+  assert.equal(pr.number, 7);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].url, /head=octo-org%3Aautodev%2Fissue-42/);
+  assert.match(requests[0].url, /base=main/);
+  assert.match(requests[0].url, /state=open/);
+});
+
+test('ensurePullRequest opens a pull request when none is open', async () => {
+  const requests = [];
+  const client = createClient(async (_url, options) => {
+    requests.push({ method: options.method, body: options.body });
+    if (options.method === 'GET') {
+      return jsonResponse([]);
+    }
+    return jsonResponse({ number: 11, html_url: 'https://example.test/pull/11' }, { status: 201 });
+  });
+
+  const pr = await client.ensurePullRequest({
+    title: 'AutoDev: Test', head: 'autodev/issue-42', base: 'main', body: 'tracking',
+  });
+
+  assert.equal(pr.number, 11);
+  assert.equal(requests[1].method, 'POST');
+  assert.deepEqual(JSON.parse(requests[1].body), {
+    title: 'AutoDev: Test', head: 'autodev/issue-42', base: 'main', body: 'tracking',
+  });
+});
+
 test('issue comments use the configured authorization token', async () => {
   let authorization;
   const client = createClient(async (_url, options) => {

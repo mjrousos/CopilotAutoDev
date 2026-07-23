@@ -89,6 +89,26 @@ test('automated transition requests must match current state and attempt', () =>
   );
 });
 
+test('initialization hands off to research as an automated success', () => {
+  const current = createCurrentTask({
+    state: STATES.INITIALIZATION,
+    executionId: null,
+    headSha: SHA,
+  });
+  const handoff = createResult({
+    state: STATES.INITIALIZATION,
+    nextState: STATES.RESEARCH,
+    headSha: SHA,
+    artifacts: [],
+  });
+
+  assert.equal(validateTransitionRequest(current, handoff).nextState, STATES.RESEARCH);
+  assert.throws(
+    () => validateTransitionRequest(current, { ...handoff, headSha: NEXT_SHA }),
+    (error) => error instanceof ContractValidationError && error.code === 'sha-mismatch',
+  );
+});
+
 test('human plan approval and changes requests map to fixed transitions', () => {
   const current = createCurrentTask({
     state: STATES.HUMAN_PLAN_REVIEW,

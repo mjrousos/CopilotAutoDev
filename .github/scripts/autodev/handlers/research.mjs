@@ -2,11 +2,15 @@
 // the canonical autodev-task comment.
 import {
   CUSTOM_AGENTS,
+  DEFAULT_ORCHESTRATOR_LOGIN,
   SCHEMA_VERSION,
   STATES,
   getArtifactPath,
 } from '../config.mjs';
+import { ContractValidationError } from '../comments.mjs';
 import { formatTaskComment } from '../task.mjs';
+import { validateTransitionRequest } from '../transitions.mjs';
+import { loadCanonicalTask } from './shared.mjs';
 
 export function buildResearchPrompt({
   issue,
@@ -44,6 +48,7 @@ export async function startResearch({
   issueNumber,
   headRef,
   headSha,
+  baseRef,
   sequence,
   attempt,
   summaryHeading = 'AutoDev Research started',
@@ -61,6 +66,7 @@ export async function startResearch({
   const execution = await agentTasks.startTask({
     prompt,
     headRef,
+    baseRef,
     customAgent: CUSTOM_AGENTS[STATES.RESEARCH],
   });
 
@@ -91,5 +97,60 @@ export async function startResearch({
     task: Object.freeze(task),
     execution,
     comment,
+  });
+}
+
+// Runs in the follow-up orchestrator execution triggered by the Initialization
+// handoff result. It validates the Initialization -> Research transition against
+// canonical state, then launches Research on the shared issue branch.
+export async function advanceToResearch({
+  github,
+  agentTasks,
+  issueNumber,
+  orchestratorLogin = DEFAULT_ORCHESTRATOR_LOGIN,
+  result,
+  now = () => new Date(),
+}) {
+  const canonical = await loadCanonicalTask({
+    github,
+    issueNumber,
+    orchestratorLogin,
+    required: true,
+  });
+  const currentTask = canonical.task;
+
+  if (currentTask.state !== STATES.INITIALIZATION) {
+    // Today the only transition that resolves to Research is the
+    // Initialization handoff. Once Design is implemented (Milestone 4), its
+    // Design -> Research feedback loop will need routing that keys on the source
+    // state rather than being funneled here and ignored.
+    return Object.freeze({
+      status: 'ignored',
+      reason: 'research-already-started',
+      state: currentTask.state,
+    });
+  }
+
+  validateTransitionRequest(currentTask, result);
+
+  const repository = await github.getRepository();
+  const baseRef = repository.default_branch;
+  if (typeof baseRef !== 'string' || baseRef.length === 0) {
+    throw new ContractValidationError(
+      'missing-default-branch',
+      'Repository metadata does not contain a default branch.',
+    );
+  }
+
+  return startResearch({
+    github,
+    agentTasks,
+    issueNumber,
+    headRef: currentTask.headRef,
+    headSha: currentTask.headSha,
+    baseRef,
+    sequence: currentTask.sequence + 1,
+    attempt: 1,
+    now,
   });
 }

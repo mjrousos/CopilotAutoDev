@@ -46,6 +46,29 @@ test('startTask sends the custom agent to the existing issue branch', async () =
   });
 });
 
+test('startTask targets the existing pull request when base_ref is supplied', async () => {
+  let request;
+  const client = createClient(async (url, options) => {
+    request = { url, options };
+    return jsonResponse({ id: 'task-9', state: 'queued' }, 201);
+  });
+
+  await client.startTask({
+    prompt: 'Research issue 42.',
+    headRef: 'autodev/issue-42',
+    baseRef: 'main',
+    customAgent: 'autodev-research',
+  });
+
+  assert.deepEqual(JSON.parse(request.options.body), {
+    prompt: 'Research issue 42.',
+    head_ref: 'autodev/issue-42',
+    custom_agent: 'autodev-research',
+    create_pull_request: false,
+    base_ref: 'main',
+  });
+});
+
 test('getTask validates the requested task ID and state', async () => {
   const client = createClient(async () => jsonResponse({
     id: 'task-123',

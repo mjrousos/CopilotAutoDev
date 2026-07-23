@@ -137,7 +137,7 @@ function formatSelectionError(comment, error) {
 
 function isValidNextTask(history, candidate) {
   if (history.length === 0) {
-    return candidate.sequence === 1 && candidate.state === STATES.RESEARCH;
+    return candidate.sequence === 1 && candidate.state === STATES.INITIALIZATION;
   }
 
   // State transitions are validated before the orchestrator writes a task

@@ -67,17 +67,26 @@ export function validateTransitionRequest(currentTaskValue, resultValue, { block
   }
 
   const handler = getStateHandler(effectiveState);
-  if (handler === HANDLERS.AGENT_TASK || handler === HANDLERS.AGENTIC_WORKFLOW) {
+  // Initialization runs synchronously in the orchestrator and posts its own
+  // success result to hand off to Research, so it is validated like the
+  // external-execution states rather than the human/retry states.
+  const isSynchronousHandoff = effectiveState === STATES.INITIALIZATION;
+  if (handler === HANDLERS.AGENT_TASK || handler === HANDLERS.AGENTIC_WORKFLOW || isSynchronousHandoff) {
     if (result.outcome !== RESULT_OUTCOMES.SUCCESS) {
       throw new ContractValidationError(
         'outcome-mismatch',
         'Automated execution states require outcome success.',
       );
     }
-    if (handler === HANDLERS.AGENTIC_WORKFLOW && result.headSha !== currentTask.headSha) {
+    // Reviews and the Initialization handoff do not advance the branch head
+    // themselves, so their result must reference the recorded head SHA.
+    if (
+      (handler === HANDLERS.AGENTIC_WORKFLOW || isSynchronousHandoff)
+      && result.headSha !== currentTask.headSha
+    ) {
       throw new ContractValidationError(
         'sha-mismatch',
-        'Agentic Workflow review results cannot change the reviewed head SHA.',
+        'This result cannot change the recorded head SHA.',
       );
     }
   } else {

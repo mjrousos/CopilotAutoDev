@@ -128,6 +128,18 @@ export function isExternalExecutionState(state) {
   return EXTERNAL_EXECUTION_STATE_VALUES.includes(state);
 }
 
+const AUTOMATED_SUCCESS_STATE_VALUES = Object.freeze([
+  STATES.INITIALIZATION,
+  ...EXTERNAL_EXECUTION_STATE_VALUES,
+]);
+
+// States that may report an automated `outcome: success` result. Initialization
+// is included because it does its work synchronously and posts its own result to
+// hand off to Research, unlike external-execution states whose worker reports it.
+export function isAutomatedSuccessState(state) {
+  return AUTOMATED_SUCCESS_STATE_VALUES.includes(state);
+}
+
 export function assertIssueNumber(issueNumber) {
   if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) {
     throw new TypeError('Issue number must be a positive safe integer.');
@@ -142,6 +154,12 @@ export function getIssueBranch(issueNumber) {
 
 export function getIssueArtifactDirectory(issueNumber) {
   return `.github/autodev/issues/${assertIssueNumber(issueNumber)}`;
+}
+
+// Placeholder file committed during Initialization so the issue branch differs
+// from the default branch and a tracking pull request can be opened for it.
+export function getIssueScaffoldPath(issueNumber) {
+  return `${getIssueArtifactDirectory(issueNumber)}/README.md`;
 }
 
 export function getArtifactPath(state, issueNumber) {
