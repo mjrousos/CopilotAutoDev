@@ -15,6 +15,7 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: write
 
 concurrency:
   group: autodev-issue-${{ github.event.issue.number || inputs.issue_number }}
