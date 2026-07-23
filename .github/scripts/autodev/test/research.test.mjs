@@ -17,6 +17,11 @@ import {
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+
 function initializationComment(headSha = SHA) {
   return {
     id: 1,
@@ -50,14 +55,30 @@ function handoffResult(headSha = SHA) {
   };
 }
 
-test('Research agent supports explicit Agent Tasks API selection', async () => {
+test('Research agent grants the tools it needs to write and report results', async () => {
   const profile = await readFile(
     new URL('../../../agents/autodev-research.agent.md', import.meta.url),
     'utf8',
   );
 
-  assert.match(profile, /^disable-model-invocation: true$/m);
-  assert.doesNotMatch(profile, /^user-invocable: false$/m);
+  // Guard the capabilities whose absence produces a silent no-op run: edit to
+  // write the artifact, execute to commit and read the branch head, read/search
+  // the repository, the read-only GitHub MCP server, and only the callback
+  // comment tool for the result.
+  for (const tool of [
+    'read',
+    'search',
+    'edit',
+    'execute',
+    'github-mcp-server/*',
+    'autodev-github-callback/add_issue_comment',
+  ]) {
+    assert.match(
+      profile,
+      new RegExp(`^\\s*-\\s*${escapeRegExp(tool)}\\s*$`, 'm'),
+      `expected the Research agent to grant the ${tool} tool`,
+    );
+  }
 });
 
 test('Research prompt constrains the artifact and callback contract', () => {

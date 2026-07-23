@@ -39,7 +39,7 @@ Research attempt: ${attempt}
 Working branch: ${headRef}
 Required artifact: ${artifactPath}
 
-Follow the Research procedure and autodev-result:v1 schema in your custom-agent instructions. For the callback, use issue ${issueNumber}, attempt ${attempt}, state research, nextState design, headRef ${headRef}, and artifacts ["${artifactPath}"].`;
+Follow the Research procedure and autodev-result:v1 schema in your custom-agent (autodev-research.agent.md). Follow all instructions in the custom agent. For the callback, use issue ${issueNumber}, attempt ${attempt}, state research, nextState design, headRef ${headRef}, and artifacts ["${artifactPath}"].`;
 }
 
 export async function startResearch({
