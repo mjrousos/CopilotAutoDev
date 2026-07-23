@@ -3,7 +3,6 @@ name: AutoDev Research
 description: Researches one AutoDev issue, writes its research artifact, and reports a structured result.
 target: github-copilot
 disable-model-invocation: true
-user-invocable: false
 tools:
   - read
   - search

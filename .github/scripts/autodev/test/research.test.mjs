@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { STATES } from '../config.mjs';
@@ -8,6 +9,16 @@ import {
 } from '../handlers/research.mjs';
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
+
+test('Research agent supports explicit Agent Tasks API selection', async () => {
+  const profile = await readFile(
+    new URL('../../../agents/autodev-research.agent.md', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(profile, /^disable-model-invocation: true$/m);
+  assert.doesNotMatch(profile, /^user-invocable: false$/m);
+});
 
 test('Research prompt constrains the artifact and callback contract', () => {
   const prompt = buildResearchPrompt({
