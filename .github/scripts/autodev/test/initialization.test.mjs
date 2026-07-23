@@ -29,6 +29,14 @@ class FakeGitHub {
     return this.repository;
   }
 
+  async getIssue() {
+    return {
+      title: 'Test issue',
+      body: 'Research this.',
+      html_url: 'https://github.com/octo/repo/issues/42',
+    };
+  }
+
   async getRef(ref) {
     return this.refs.get(ref) ?? null;
   }
@@ -60,6 +68,21 @@ class FakeGitHub {
   }
 }
 
+class FakeAgentTasks {
+  constructor() {
+    this.started = [];
+  }
+
+  async startTask(request) {
+    this.started.push(request);
+    return {
+      id: 'research-task',
+      state: 'queued',
+      html_url: 'https://github.com/copilot/tasks/research-task',
+    };
+  }
+}
+
 function createTask() {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -76,29 +99,35 @@ function createTask() {
 
 test('initialization creates one issue branch and one canonical comment', async () => {
   const github = new FakeGitHub();
+  const agentTasks = new FakeAgentTasks();
   const result = await initializeIssue({
     github,
+    agentTasks,
     issueNumber: 42,
     now: () => new Date('2026-07-22T17:00:00Z'),
   });
 
-  assert.equal(result.status, 'initialized');
+  assert.equal(result.status, 'research-started');
   assert.deepEqual(github.createdBranches, ['autodev/issue-42']);
   assert.equal(github.comments.length, 1);
   assert.match(github.comments[0].body, /autodev-task:v1/);
   assert.equal(result.task.state, STATES.RESEARCH);
-  assert.equal(result.task.executionId, null);
+  assert.equal(result.task.executionId, 'research-task');
+  assert.equal(agentTasks.started.length, 1);
 });
 
 test('repeated initialization is idempotent', async () => {
   const github = new FakeGitHub();
+  const agentTasks = new FakeAgentTasks();
   await initializeIssue({
     github,
+    agentTasks,
     issueNumber: 42,
     now: () => new Date('2026-07-22T17:00:00Z'),
   });
   const second = await initializeIssue({
     github,
+    agentTasks,
     issueNumber: 42,
     now: () => new Date('2026-07-22T17:01:00Z'),
   });
@@ -106,23 +135,26 @@ test('repeated initialization is idempotent', async () => {
   assert.equal(second.status, 'already-initialized');
   assert.deepEqual(github.createdBranches, ['autodev/issue-42']);
   assert.equal(github.comments.length, 1);
+  assert.equal(agentTasks.started.length, 1);
 });
 
 test('existing canonical state is returned without branch work', async () => {
   const github = new FakeGitHub();
+  const agentTasks = new FakeAgentTasks();
   github.comments.push({
     id: 1,
     body: formatTaskComment(createTask()),
     user: { login: DEFAULT_ORCHESTRATOR_LOGIN },
   });
 
-  const result = await initializeIssue({ github, issueNumber: 42 });
+  const result = await initializeIssue({ github, agentTasks, issueNumber: 42 });
   assert.equal(result.status, 'already-initialized');
   assert.deepEqual(github.createdBranches, []);
 });
 
 test('task markers from non-orchestrator authors do not block initialization', async () => {
   const github = new FakeGitHub();
+  const agentTasks = new FakeAgentTasks();
   github.comments.push({
     id: 1,
     body: formatTaskComment(createTask()),
@@ -131,11 +163,12 @@ test('task markers from non-orchestrator authors do not block initialization', a
 
   const result = await initializeIssue({
     github,
+    agentTasks,
     issueNumber: 42,
     now: () => new Date('2026-07-22T17:00:00Z'),
   });
 
-  assert.equal(result.status, 'initialized');
+  assert.equal(result.status, 'research-started');
   assert.deepEqual(github.createdBranches, ['autodev/issue-42']);
   assert.equal(result.errors[0].code, 'unauthorized-task-author');
 });

@@ -41,6 +41,8 @@ The core modules have distinct responsibilities:
 - `transitions.mjs` is the central transition-request validator.
 - `validation.mjs` owns trusted-author and repository-path/change-policy checks.
 - `github-client.mjs` wraps only the GitHub REST operations currently needed by implemented milestones.
+- `agent-tasks-client.mjs` isolates the public-preview Agent Tasks API and its user-scoped token.
+- `handlers/research.mjs` launches Research; `handlers/design.mjs` validates its callback before recording Design.
 
 Research, Design, SecurityReview, and Implementation are planned as asynchronous Copilot Agent Tasks. CodeReview is planned as a GitHub Agentic Workflow with read-only agent permissions and safe outputs. See `.github/plans/initial-requirements.md` and `.github/plans/initial-implementation.plan.md` before changing behavior or scope.
 

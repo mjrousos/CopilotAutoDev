@@ -14,6 +14,7 @@ import {
   TASK_MARKER,
 } from './task.mjs';
 import { isTrustedHumanComment } from './validation.mjs';
+import { enterDesign } from './handlers/design.mjs';
 import { initializeIssue } from './handlers/initialization.mjs';
 
 export const INVALID_STATE = 'invalid';
@@ -27,6 +28,7 @@ export function determineState({
   eventPayload,
   issueNumber,
   orchestratorLogin = DEFAULT_ORCHESTRATOR_LOGIN,
+  callbackLogin,
 }) {
   if (eventName === 'issues') {
     if (
@@ -64,8 +66,16 @@ export function determineState({
   if (result === null) {
     return Object.freeze({ state: INVALID_STATE, reason: 'unstructured-comment' });
   }
-  if (isHumanOutcome(result.outcome) && !isTrustedHumanComment(comment)) {
-    return Object.freeze({ state: INVALID_STATE, reason: 'untrusted-human-result' });
+  if (isHumanOutcome(result.outcome)) {
+    if (!isTrustedHumanComment(comment)) {
+      return Object.freeze({ state: INVALID_STATE, reason: 'untrusted-human-result' });
+    }
+  } else if (
+    typeof callbackLogin !== 'string'
+    || callbackLogin.length === 0
+    || comment.user?.login !== callbackLogin
+  ) {
+    return Object.freeze({ state: INVALID_STATE, reason: 'untrusted-automated-result' });
   }
 
   // The result describes the requested next state. Its transition is validated
@@ -75,56 +85,66 @@ export function determineState({
 
 export async function dispatchAutoDevEvent({
   github,
+  agentTasks,
   eventName,
   eventPayload,
   issueNumber,
   orchestratorLogin = DEFAULT_ORCHESTRATOR_LOGIN,
+  callbackLogin,
   now,
 }) {
-  let determination;
   try {
-    determination = determineState({
+    const determination = determineState({
       eventName,
       eventPayload,
       issueNumber,
       orchestratorLogin,
+      callbackLogin,
     });
+
+    switch (determination.state) {
+      case INVALID_STATE:
+        return Object.freeze({
+          status: 'ignored',
+          reason: determination.reason,
+        });
+      case STATES.INITIALIZATION:
+        return initializeIssue({
+          github,
+          agentTasks,
+          issueNumber,
+          orchestratorLogin,
+          now,
+        });
+      case STATES.DESIGN:
+        return enterDesign({
+          github,
+          agentTasks,
+          issueNumber,
+          result: determination.result,
+          orchestratorLogin,
+          now,
+        });
+      default:
+        return Object.freeze({
+          status: 'deferred-state',
+          reason: 'state-handler-is-not-implemented',
+          state: determination.state,
+          result: determination.result,
+        });
+    }
   } catch (error) {
     if (error instanceof ContractValidationError) {
       await github.createIssueComment(
         issueNumber,
-        `AutoDev ignored an invalid result comment: ${error.message}`,
+        `AutoDev rejected this event: ${error.message}`,
       );
       return Object.freeze({
         status: 'ignored',
-        reason: 'invalid-result',
+        reason: 'invalid-event',
         errorCode: error.code,
       });
     }
     throw error;
-  }
-
-  switch (determination.state) {
-    case INVALID_STATE:
-      return Object.freeze({
-        status: 'ignored',
-        reason: determination.reason,
-      });
-    case STATES.INITIALIZATION:
-      return initializeIssue({
-        github,
-        issueNumber,
-        orchestratorLogin,
-        now,
-      });
-    default:
-      // Milestone 2 implements only Initialization. Returning an explicit
-      // deferred state keeps later requests visible without executing them.
-      return Object.freeze({
-        status: 'deferred-state',
-        reason: 'state-handler-is-not-implemented',
-        state: determination.state,
-        result: determination.result,
-      });
   }
 }

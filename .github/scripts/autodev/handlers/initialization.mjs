@@ -2,30 +2,24 @@
 // the first canonical task snapshot; Milestone 3 will replace the dry-run task.
 import {
   DEFAULT_ORCHESTRATOR_LOGIN,
-  SCHEMA_VERSION,
-  STATES,
   getIssueBranch,
 } from '../config.mjs';
 import { ContractValidationError } from '../comments.mjs';
-import {
-  formatTaskComment,
-  selectCanonicalTask,
-} from '../task.mjs';
-
-function hasBlockingCanonicalErrors(selection) {
-  return selection.errors.some((error) => error.code !== 'unauthorized-task-author');
-}
+import { loadCanonicalTask } from './shared.mjs';
+import { startResearch } from './research.mjs';
 
 export async function initializeIssue({
   github,
+  agentTasks,
   issueNumber,
   orchestratorLogin = DEFAULT_ORCHESTRATOR_LOGIN,
   now = () => new Date(),
 }) {
-  const comments = await github.getIssueComments(issueNumber);
-  const canonical = selectCanonicalTask(comments, {
+  const canonical = await loadCanonicalTask({
+    github,
     issueNumber,
-    isOrchestrator: (comment) => comment.user?.login === orchestratorLogin,
+    orchestratorLogin,
+    required: false,
   });
 
   if (canonical.task !== null) {
@@ -35,15 +29,6 @@ export async function initializeIssue({
       errors: canonical.errors,
     });
   }
-  if (hasBlockingCanonicalErrors(canonical)) {
-    // Do not create a second history when existing orchestrator comments are
-    // malformed or ambiguous. A human must resolve the canonical history first.
-    throw new ContractValidationError(
-      'invalid-canonical-history',
-      'AutoDev cannot initialize because existing orchestrator state comments are invalid.',
-    );
-  }
-
   const repository = await github.getRepository();
   if (typeof repository.default_branch !== 'string' || repository.default_branch.length === 0) {
     throw new ContractValidationError(
@@ -70,32 +55,19 @@ export async function initializeIssue({
     );
   }
 
-  const task = {
-    schemaVersion: SCHEMA_VERSION,
-    issue: issueNumber,
-    sequence: 1,
-    state: STATES.RESEARCH,
-    executionId: null,
-    attempt: 1,
+  const research = await startResearch({
+    github,
+    agentTasks,
+    issueNumber,
+    baseRef: repository.default_branch,
     headRef,
     headSha,
-    createdAt: now().toISOString(),
-  };
-  const commentBody = formatTaskComment(
-    task,
-    [
-      '### AutoDev initialized',
-      '',
-      `Created working branch \`${headRef}\` from \`${repository.default_branch}\`.`,
-      'Research is next. Milestone 2 uses a dry-run Research handler and does not launch an Agent Task.',
-    ].join('\n'),
-  );
-  const comment = await github.createIssueComment(issueNumber, commentBody);
-
+    sequence: 1,
+    attempt: 1,
+    now,
+  });
   return Object.freeze({
-    status: 'initialized',
-    task: Object.freeze(task),
-    comment,
+    ...research,
     errors: canonical.errors,
   });
 }
