@@ -14,7 +14,7 @@ The implementation will be delivered in independently usable milestones. Each mi
 - Use the same `autodev-result:v1` schema for automated and human transition requests; authorization and field requirements vary by author rather than by marker type.
 - Trust human decisions only from comments whose `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`.
 - The orchestrator, not the Implementation agent, creates or reuses the implementation pull request.
-- Use execution-neutral `sourceExecutionId` and `nextExecutionId`; derive the execution mechanism from the state-to-handler mapping.
+- Store only the current `state` and its orchestrator-recorded `executionId` in each `autodev-task:v1` record; append-only comments provide history.
 - CodeReview is an advisory Agentic Workflow. It may post findings and request implementation changes, but a human performs the final code-review decision.
 - POC research, design, and security artifacts remain on the issue branch and are included in the implementation pull request.
 - Use GitHub.com and the Agent Tasks API version documented in the requirements. Isolate preview API behavior behind a small client module.
@@ -38,20 +38,26 @@ The implementation will be delivered in independently usable milestones. Each mi
     autodev/
       main.mjs
       config.mjs
-      state.mjs
+      task.mjs
       transitions.mjs
       comments.mjs
       github-client.mjs
       agent-tasks-client.mjs
-      handlers.mjs
+      dispatcher.mjs
+      handlers/
+        initialization.mjs
       validation.mjs
       reconcile.mjs
       test/
-        state.test.mjs
+        config.test.mjs
+        github-client.test.mjs
+        main.test.mjs
+        task.test.mjs
         transitions.test.mjs
         comments.test.mjs
         validation.test.mjs
-        handlers.test.mjs
+        dispatcher.test.mjs
+        initialization.test.mjs
         reconcile.test.mjs
   workflows/
     autodev-orchestrator.yml
@@ -89,9 +95,11 @@ The exact module split may be collapsed if implementation reveals that a module 
 - [x] Required secrets, MCP capabilities, labels, and GitHub/Copilot plan prerequisites are documented with least-privilege permissions.
 - [x] The requirements contain complete callback, human-review, recovery, and terminal-state contracts.
 
-## Milestone 1: Build and test the state-machine core
+## Milestone 1: Build and test the state-machine core - Complete
 
-1. Create `config.mjs` containing:
+**Status:** Complete as of 2026-07-22.
+
+1. [x] Create `config.mjs` containing:
    - State constants and the fixed handler mapping.
    - Allowed transition graph:
      - Initialization -> Research
@@ -103,15 +111,15 @@ The exact module split may be collapsed if implementation reveals that a module 
      - CodeReview -> Implementation or HumanCodeReview
      - HumanCodeReview -> Implementation or Completed
      - Any automated state -> Blocked when bounded recovery is exhausted or human intervention is required
-     - Blocked -> the state recorded in the transition that entered Blocked, after a trusted human retry decision
+     - Blocked -> the most recent task state preceding Blocked, after a trusted human retry decision
    - Branch naming convention `autodev/issue-<number>`.
    - Artifact paths under `.github/autodev/issues/<number>/`.
    - Allowed changed-file patterns per Agent Task state.
-2. Implement canonical state parsing and serialization for `<!-- autodev-state:v1 ... -->` comments:
-   - Validate schema version, issue number, sequence, states, execution IDs, attempt, ref, SHA, and timestamp.
+2. [x] Implement current-task parsing and serialization for `<!-- autodev-task:v1 ... -->` comments:
+   - Validate schema version, issue number, sequence, current state, execution ID, attempt, ref, SHA, and timestamp.
    - Select the highest valid orchestrator-authored sequence.
-   - Reject malformed, duplicate-sequence, wrong-issue, unknown-version, and non-orchestrator state comments.
-3. Define and implement the unified transition-result marker:
+   - Reject malformed, duplicate-sequence, sequence-gap, wrong-issue, unknown-version, and non-orchestrator task comments.
+3. [x] Define and implement the unified transition-result marker:
 
    ```text
    <!-- autodev-result:v1
@@ -119,7 +127,6 @@ The exact module split may be collapsed if implementation reveals that a module 
      "schemaVersion": 1,
      "issue": 42,
      "state": "research",
-     "executionId": "...",
      "attempt": 1,
      "outcome": "success",
      "nextState": "design",
@@ -131,52 +138,53 @@ The exact module split may be collapsed if implementation reveals that a module 
    -->
    ```
 
-   - Automated executions require an `executionId`, use `outcome: "success"` for a normal transition, and report their artifacts.
-   - Human-authored results use the same marker with `outcome: "approved"`, `"changes-requested"`, or `"retry"`. Their `executionId` may be null or a local-tool correlation ID and their `artifacts` array may be empty.
+   - Automated executions use `outcome: "success"` for a normal transition and report their artifacts.
+   - Human-authored results use the same marker with `outcome: "approved"`, `"changes-requested"`, or `"retry"` and may use an empty `artifacts` array.
    - Both forms require the current state, requested `nextState`, current branch and SHA, attempt, and decision rationale.
-4. Implement transition validation independently from GitHub API operations.
-5. Require every decision-state artifact to contain a machine-readable decision block with `nextState` and rationale. The callback repeats this decision, but the committed artifact is the recovery source if the callback is lost.
-6. Add `node:test` coverage for valid and invalid state comments, automated and human-authored result comments, sequence selection, transition loops, Blocked/retry behavior, terminal transitions, and trusted author associations.
+4. [x] Implement transition validation independently from GitHub API operations.
+5. [x] Require every decision-state artifact to contain a machine-readable decision block with `nextState` and rationale. The callback repeats this decision, but the committed artifact is the recovery source if the callback is lost.
+6. [x] Add `node:test` coverage for valid and invalid task comments, automated and human-authored result comments, sequence selection, transition loops, Blocked/retry behavior, terminal transitions, and trusted author associations.
 
 **Completion criteria**
 
-- `node --test .github/scripts/autodev/test/*.test.mjs` passes.
-- All state transitions and comment contracts can be exercised without GitHub access.
-- No handler can bypass the central transition validator.
+- [x] `node --test .github/scripts/autodev/test/*.test.mjs` passes.
+- [x] All state transitions and comment contracts can be exercised without GitHub access.
+- [x] No handler can bypass the central transition validator.
 
-## Milestone 2: Wire the orchestrator workflow and Initialization
+## Milestone 2: Wire the orchestrator workflow and Initialization - Complete
 
-1. Create `.github/workflows/autodev-orchestrator.yml` with:
+**Status:** Complete as of 2026-07-22.
+
+1. [x] Create `.github/workflows/autodev-orchestrator.yml` with:
    - `issues: [labeled]` for the trigger label.
    - `issue_comment: [created]` for automated and human-authored result comments.
    - `workflow_dispatch` inputs for issue number and reconciliation/manual reruns.
    - One normalized issue-number expression shared by all triggers, including a coalesce over `github.event.issue.number` and `workflow_dispatch` input, and one per-issue concurrency group derived from that normalized value.
-   - Explicit least-privilege `issues`, `contents`, `pull-requests`, and `actions` permissions required by deterministic operations.
-2. Pin a Node LTS version that supports built-in `fetch` and `node:test`, check out the default branch, and run `main.mjs` with normalized event data supplied through environment variables or the GitHub event JSON path.
-3. Implement a small GitHub REST client using Node's built-in `fetch`:
+   - Explicit least-privilege `issues` and `contents` permissions required by Initialization.
+2. [x] Pin a Node LTS version that supports built-in `fetch` and `node:test`, check out the default branch, and run `main.mjs` with normalized event data supplied through environment variables or the GitHub event JSON path.
+3. [x] Implement a small GitHub REST client using Node's built-in `fetch`:
    - Read issue comments with pagination.
    - Read repository/default-branch metadata and refs.
    - Create the issue branch if absent and verify it points at the expected base commit.
    - Create comments and add/remove only configured labels.
    - Use the workflow `GITHUB_TOKEN` for all orchestrator-authored canonical, error, and instruction comments so those writes do not trigger another workflow run.
-   - Find or create an issue-linked pull request in later milestones.
-4. Implement Initialization idempotently:
+4. [x] Implement Initialization idempotently:
    - Ignore labels other than the configured trigger label.
    - Do nothing if valid canonical state already exists.
    - Create or verify `autodev/issue-<number>`.
    - Produce the initial canonical transition toward Research.
-5. Add defense-in-depth event filtering:
-   - Ignore canonical `autodev-state` comments as trigger inputs.
+5. [x] Add defense-in-depth event filtering:
+   - Ignore canonical `autodev-task` comments as trigger inputs.
    - Ignore comments authored by the orchestrator identity.
    - Process external execution results and trusted human-authored results only.
-6. Initially support a dry-run handler for Research so Initialization can be validated before real Agent Tasks are enabled.
-7. Add mocked-fetch tests covering pagination, existing branches, duplicate trigger events, canonical comment creation, self-authored comment suppression, consistent concurrency inputs, and API failures.
+6. [x] Initially support a dry-run handler for Research so Initialization can be validated before real Agent Tasks are enabled.
+7. [x] Add mocked-fetch tests covering pagination, existing branches, duplicate trigger events, canonical comment creation, self-authored comment suppression, consistent concurrency inputs, and API failures.
 
 **Completion criteria**
 
-- Repeated trigger-label events create one branch and one logical initialization.
-- The issue contains a valid sequence-1 canonical state record.
-- Duplicate events do not create duplicate branches or state transitions.
+- [x] Repeated trigger-label events create one branch and one logical initialization.
+- [x] The issue contains a valid sequence-1 canonical state record.
+- [x] Duplicate events do not create duplicate branches or state transitions.
 
 ## Milestone 3: Integrate Agent Tasks and complete Research
 
@@ -190,12 +198,13 @@ The exact module split may be collapsed if implementation reveals that a module 
    - Restrict it to Research responsibilities and the Research artifact path.
    - Give it read/search/edit/execute capabilities, read-only repository access, configured web search, and only the callback issue-comment write tool.
    - Require citations or source links in the research artifact.
-   - Require a final structured callback whose execution ID, branch, SHA, artifact path, and requested next state match the task prompt.
+   - Require a final structured callback whose branch, SHA, artifact path, and requested next state match the task prompt.
    - Merge the agent definition to the default branch before attempting a live Agent Task, because cloud custom-agent resolution uses repository-visible/default-branch agent definitions.
-4. Launch Research with a deterministic prompt containing issue context, branch/ref expectations, execution ID, artifact path, allowed paths, and callback contract.
+4. Launch Research with a deterministic prompt containing issue context, branch/ref expectations, artifact path, allowed paths, and callback contract. Record the returned Agent Task ID in the new Research `autodev-task` comment.
 5. Process Research callbacks:
    - Verify callback actor identity.
-   - Match execution ID, state, attempt, branch, and current canonical state.
+   - Match state, attempt, branch, and current canonical task.
+   - Query and validate the Agent Task identified by the current task record's `executionId`.
    - Verify the reported SHA is the branch head.
    - Diff the previous canonical `headSha` against the newly reported `headSha` and reject files added by this execution outside the Research allowlist. Do not validate against the repository base branch, because the shared branch already contains prior-state artifacts.
    - Verify the Research artifact exists at the reported SHA.
@@ -252,6 +261,7 @@ The exact module split may be collapsed if implementation reveals that a module 
    - Never create the pull request itself.
    - Report a structured callback with the final head SHA and Implementation outcome.
 5. After callback validation, have the orchestrator:
+   - Add `pull-requests: write` to the orchestrator workflow when PR operations are introduced.
    - Verify changed files between the preceding canonical SHA and the reported Implementation SHA, plus the final branch head.
    - Create or reuse one pull request from the issue branch to the default branch.
    - Link the issue and include artifact links and the approved SHA in the PR body.
@@ -289,6 +299,7 @@ The exact module split may be collapsed if implementation reveals that a module 
 5. Configure only the issue callback comment to use `AUTODEV_CALLBACK_TOKEN` or an equivalent GitHub App identity so that it triggers the orchestrator; leave PR review comments and labels on the safe output's normal workflow identity unless a separate identity is required.
 6. Compile with `gh aw compile autodev-code-review`, commit both source `.md` and generated `.lock.yml`, and keep the pinned gh-aw version consistent with setup steps.
 7. Add orchestrator dispatch logic using the unique correlation ID and expected SHA.
+   - Add `actions: write` to the orchestrator workflow when Agentic Workflow dispatch is introduced.
 8. Validate Agentic Workflow callbacks using the same canonical transition validator, with state-specific correlation and SHA checks.
 9. Implement HumanCodeReview result comments using the unified marker:
    - `request-changes` returns to Implementation.
@@ -356,7 +367,7 @@ The exact module split may be collapsed if implementation reveals that a module 
 
 ## Cross-cutting implementation rules
 
-- The orchestrator is the only writer of canonical `autodev-state` records.
+- The orchestrator is the only writer of canonical `autodev-task` records.
 - The orchestrator uses `GITHUB_TOKEN` for its comments; only external callback comments use `AUTODEV_CALLBACK_TOKEN`.
 - Agents and Agentic Workflows submit requests; they never directly choose an authoritative transition.
 - Re-read canonical state immediately before every mutation and use per-issue concurrency.

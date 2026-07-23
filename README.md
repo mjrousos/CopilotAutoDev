@@ -89,6 +89,20 @@ foreach ($label in $labels) {
 }
 ```
 
+## Run JavaScript tests
+
+The AutoDev orchestration modules use Node's built-in test runner and do not require an npm install. From the repository root, use Node.js 20 or later to run the complete suite:
+
+```powershell
+node --test .github/scripts/autodev/test/*.test.mjs
+```
+
+To run one test file while developing:
+
+```powershell
+node --test .github/scripts/autodev/test/task.test.mjs
+```
+
 ## Validate setup
 
 1. Confirm the Actions secrets `AUTODEV_AGENT_TASKS_TOKEN` and `AUTODEV_CALLBACK_TOKEN` exist.
