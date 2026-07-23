@@ -29,7 +29,7 @@ The Agent Tasks API supports fine-grained PATs and GitHub App user access tokens
 
 The callback PAT has repository-level `Issues: write`, not a comment-only token scope. For this POC, the MCP and Agentic Workflow tool allowlists provide the narrower `add_issue_comment` boundary. Never use the Agent Tasks token as a callback token, and never expose it to an agent.
 
-The orchestrator must use `GITHUB_TOKEN` for its own comments. Events caused by this token do not recursively start another workflow. External execution callbacks use the callback PAT so that their comments do trigger the orchestrator.
+The orchestrator must use `GITHUB_TOKEN` for its own comments. Events caused by this token do not recursively start another workflow. External execution callbacks use the callback PAT so that their comments do trigger the orchestrator. At startup, the orchestrator calls the authenticated-user endpoint with `AUTODEV_CALLBACK_TOKEN` and accepts automated result comments only from the returned login.
 
 ## Configure Copilot MCP access
 

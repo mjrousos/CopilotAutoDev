@@ -45,11 +45,16 @@ The implementation will be delivered in independently usable milestones. Each mi
       agent-tasks-client.mjs
       dispatcher.mjs
       handlers/
+        design.mjs
         initialization.mjs
+        research.mjs
+        shared.mjs
       validation.mjs
       reconcile.mjs
       test/
         config.test.mjs
+        agent-tasks-client.test.mjs
+        design.test.mjs
         github-client.test.mjs
         main.test.mjs
         task.test.mjs
@@ -58,6 +63,7 @@ The implementation will be delivered in independently usable milestones. Each mi
         validation.test.mjs
         dispatcher.test.mjs
         initialization.test.mjs
+        research.test.mjs
         reconcile.test.mjs
   workflows/
     autodev-orchestrator.yml
@@ -186,22 +192,25 @@ The exact module split may be collapsed if implementation reveals that a module 
 - [x] The issue contains a valid sequence-1 canonical state record.
 - [x] Duplicate events do not create duplicate branches or state transitions.
 
-## Milestone 3: Integrate Agent Tasks and complete Research
+## Milestone 3: Integrate Agent Tasks and complete Research - Implemented
 
-1. Implement `agent-tasks-client.mjs` around:
+**Status:** Implementation complete as of 2026-07-23. Live Agent Task validation requires these changes and the custom agent to be merged to the default branch.
+
+1. [x] Implement `agent-tasks-client.mjs` around:
    - `POST /agents/repos/{owner}/{repo}/tasks`
    - `GET /agents/repos/{owner}/{repo}/tasks/{task_id}`
    - Required preview headers and explicit error reporting.
    - `base_ref`, existing `head_ref`, `custom_agent`, and `create_pull_request: false`.
-2. Keep the Agent Tasks token isolated to the client and workflow environment. Never include it in prompts, branches, artifacts, or agent MCP configuration.
-3. Create `autodev-research.agent.md`:
+2. [x] Keep the Agent Tasks token isolated to the client and workflow environment. Never include it in prompts, branches, artifacts, or agent MCP configuration.
+3. [x] Create `autodev-research.agent.md`:
+   - The agent should instruct Copilot to thoroughly research the issue and produce a single artifact at the configured path.
    - Restrict it to Research responsibilities and the Research artifact path.
    - Give it read/search/edit/execute capabilities, read-only repository access, configured web search, and only the callback issue-comment write tool.
    - Require citations or source links in the research artifact.
    - Require a final structured callback whose branch, SHA, artifact path, and requested next state match the task prompt.
    - Merge the agent definition to the default branch before attempting a live Agent Task, because cloud custom-agent resolution uses repository-visible/default-branch agent definitions.
-4. Launch Research with a deterministic prompt containing issue context, branch/ref expectations, artifact path, allowed paths, and callback contract. Record the returned Agent Task ID in the new Research `autodev-task` comment.
-5. Process Research callbacks:
+4. [x] Launch Research with a deterministic prompt containing issue context, branch/ref expectations, artifact path, allowed paths, and callback contract. Record the returned Agent Task ID in the new Research `autodev-task` comment.
+5. [x] Process Research callbacks:
    - Verify callback actor identity.
    - Match state, attempt, branch, and current canonical task.
    - Query and validate the Agent Task identified by the current task record's `executionId`.
@@ -209,14 +218,14 @@ The exact module split may be collapsed if implementation reveals that a module 
    - Diff the previous canonical `headSha` against the newly reported `headSha` and reject files added by this execution outside the Research allowlist. Do not validate against the repository base branch, because the shared branch already contains prior-state artifacts.
    - Verify the Research artifact exists at the reported SHA.
    - Transition to Design only after all checks pass.
-6. Add integration-style tests using mocked Agent Tasks and GitHub API responses.
+6. [x] Add integration-style tests using mocked Agent Tasks and GitHub API responses.
 
 **Completion criteria**
 
-- A labeled test issue progresses from Initialization through a real Research Agent Task.
-- Research commits its artifact to the shared issue branch.
-- A valid callback causes exactly one canonical Research -> Design transition.
-- Invalid callbacks or out-of-scope changes are rejected with a visible error comment and no transition.
+- [ ] A labeled test issue progresses from Initialization through a real Research Agent Task.
+- [ ] Research commits its artifact to the shared issue branch.
+- [ ] A valid callback causes exactly one canonical Research -> Design transition in the live repository.
+- [x] Invalid callbacks or out-of-scope changes are rejected with a visible error comment and no transition in integration tests.
 
 ## Milestone 4: Add Design and SecurityReview, including feedback loops
 

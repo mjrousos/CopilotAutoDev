@@ -143,6 +143,19 @@ export class GitHubClient {
     return response.data;
   }
 
+  async getAuthenticatedUser() {
+    const response = await this.request('GET', '/user');
+    if (typeof response.data?.login !== 'string' || response.data.login.length === 0) {
+      throw new GitHubApiError({
+        method: 'GET',
+        path: '/user',
+        status: 502,
+        responseBody: { message: 'Expected the authenticated GitHub user login.' },
+      });
+    }
+    return response.data;
+  }
+
   async getRef(ref) {
     assertNonEmptyString(ref, 'ref');
     const response = await this.request(
@@ -223,6 +236,58 @@ export class GitHubClient {
       status: 508,
       responseBody: { message: 'Issue comment pagination exceeded 1000 pages.' },
     });
+  }
+
+  async getIssue(issueNumber) {
+    assertIssueNumber(issueNumber);
+    const response = await this.request(
+      'GET',
+      this.repositoryPath(`/issues/${issueNumber}`),
+    );
+    return response.data;
+  }
+
+  async compareCommits(baseSha, headSha) {
+    assertNonEmptyString(baseSha, 'baseSha');
+    assertNonEmptyString(headSha, 'headSha');
+    const response = await this.request(
+      'GET',
+      this.repositoryPath(`/compare/${encodeURIComponent(baseSha)}...${encodeURIComponent(headSha)}`),
+    );
+    if (!Array.isArray(response.data?.files)) {
+      throw new GitHubApiError({
+        method: 'GET',
+        path: this.repositoryPath('/compare'),
+        status: 502,
+        responseBody: { message: 'Expected a files array in the comparison response.' },
+      });
+    }
+    // GitHub returns at most 300 changed files for a comparison and does not
+    // expose later files through pagination. Reject the ambiguous boundary
+    // rather than approving a diff whose complete file set may be hidden.
+    if (response.data.files.length >= 300) {
+      throw new GitHubApiError({
+        method: 'GET',
+        path: this.repositoryPath('/compare'),
+        status: 422,
+        responseBody: {
+          message: 'Comparison reached GitHub\'s 300-file validation limit.',
+        },
+      });
+    }
+    return response.data;
+  }
+
+  async getContent(filePath, ref) {
+    assertNonEmptyString(filePath, 'filePath');
+    assertNonEmptyString(ref, 'ref');
+    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+    const response = await this.request(
+      'GET',
+      this.repositoryPath(`/contents/${encodedPath}`),
+      { query: { ref }, allowNotFound: true },
+    );
+    return response?.data ?? null;
   }
 
   async createIssueComment(issueNumber, body) {

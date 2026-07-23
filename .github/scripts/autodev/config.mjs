@@ -78,6 +78,10 @@ export const LABELS = Object.freeze({
 
 export const DEFAULT_ORCHESTRATOR_LOGIN = 'github-actions[bot]';
 
+export const CUSTOM_AGENTS = Object.freeze({
+  [STATES.RESEARCH]: 'autodev-research',
+});
+
 const ARTIFACT_FILE_NAMES = Object.freeze({
   [STATES.RESEARCH]: 'research.md',
   [STATES.DESIGN]: 'design.md',

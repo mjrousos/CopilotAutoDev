@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 import { DEFAULT_ORCHESTRATOR_LOGIN } from './config.mjs';
+import { AgentTasksClient } from './agent-tasks-client.mjs';
 import { GitHubClient } from './github-client.mjs';
 import { dispatchAutoDevEvent } from './dispatcher.mjs';
 
@@ -43,6 +44,8 @@ export async function run({
   assertNonEmptyString(env.GITHUB_EVENT_NAME, 'GITHUB_EVENT_NAME');
   assertNonEmptyString(env.GITHUB_EVENT_PATH, 'GITHUB_EVENT_PATH');
   assertNonEmptyString(env.AUTODEV_GITHUB_TOKEN, 'AUTODEV_GITHUB_TOKEN');
+  assertNonEmptyString(env.AUTODEV_AGENT_TASKS_TOKEN, 'AUTODEV_AGENT_TASKS_TOKEN');
+  assertNonEmptyString(env.AUTODEV_CALLBACK_TOKEN, 'AUTODEV_CALLBACK_TOKEN');
 
   const eventPayload = JSON.parse(await readFileImpl(env.GITHUB_EVENT_PATH, 'utf8'));
   const issueNumber = resolveIssueNumber({
@@ -58,13 +61,30 @@ export async function run({
     fetchImpl,
     apiUrl: env.GITHUB_API_URL,
   });
+  const agentTasks = new AgentTasksClient({
+    owner,
+    repo,
+    token: env.AUTODEV_AGENT_TASKS_TOKEN,
+    fetchImpl,
+    apiUrl: env.GITHUB_API_URL,
+  });
+  const callbackGithub = new GitHubClient({
+    owner,
+    repo,
+    token: env.AUTODEV_CALLBACK_TOKEN,
+    fetchImpl,
+    apiUrl: env.GITHUB_API_URL,
+  });
+  const callbackUser = await callbackGithub.getAuthenticatedUser();
 
   const result = await dispatchAutoDevEvent({
     github,
+    agentTasks,
     eventName: env.GITHUB_EVENT_NAME,
     eventPayload,
     issueNumber,
     orchestratorLogin: env.AUTODEV_ORCHESTRATOR_LOGIN ?? DEFAULT_ORCHESTRATOR_LOGIN,
+    callbackLogin: callbackUser.login,
   });
   log.log(JSON.stringify({ issueNumber, ...result }));
   return result;

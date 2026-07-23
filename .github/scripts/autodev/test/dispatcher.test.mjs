@@ -135,6 +135,31 @@ test('trusted human results are recognized and untrusted ones are ignored', () =
   assert.equal(untrusted.reason, 'untrusted-human-result');
 });
 
+test('automated results require the configured callback identity', () => {
+  const eventPayload = {
+    issue: { number: 42 },
+    comment: {
+      body: createResultComment(),
+      user: { login: 'callback-user' },
+      author_association: 'COLLABORATOR',
+    },
+  };
+
+  assert.equal(determineState({
+    eventName: 'issue_comment',
+    eventPayload,
+    issueNumber: 42,
+    callbackLogin: 'CALLBACK-USER',
+  }).state, STATES.DESIGN);
+
+  assert.equal(determineState({
+    eventName: 'issue_comment',
+    eventPayload,
+    issueNumber: 42,
+    callbackLogin: 'different-user',
+  }).reason, 'untrusted-automated-result');
+});
+
 test('invalid result comments receive a visible error without a transition', async () => {
   const github = new FakeGitHub();
   const result = await dispatchAutoDevEvent({
@@ -152,12 +177,12 @@ test('invalid result comments receive a visible error without a transition', asy
   });
 
   assert.equal(result.status, 'ignored');
-  assert.equal(result.reason, 'invalid-result');
+  assert.equal(result.reason, 'invalid-event');
   assert.equal(github.comments.length, 1);
-  assert.match(github.comments[0].body, /invalid result comment/);
+  assert.match(github.comments[0].body, /rejected this event/);
 });
 
-test('valid execution results determine the next state but defer its handler', async () => {
+test('valid results for later milestones determine the state but defer its handler', async () => {
   const github = new FakeGitHub();
   const result = await dispatchAutoDevEvent({
     github,
@@ -165,15 +190,15 @@ test('valid execution results determine the next state but defer its handler', a
     eventPayload: {
       issue: { number: 42 },
       comment: {
-        body: createResultComment(),
-        user: { login: 'callback-bot' },
-        author_association: 'NONE',
+        body: createResultComment(RESULT_OUTCOMES.APPROVED),
+        user: { login: 'maintainer' },
+        author_association: 'MEMBER',
       },
     },
     issueNumber: 42,
   });
 
   assert.equal(result.status, 'deferred-state');
-  assert.equal(result.state, STATES.DESIGN);
+  assert.equal(result.state, STATES.IMPLEMENTATION);
   assert.equal(github.comments.length, 0);
 });
