@@ -59,11 +59,11 @@ export async function initializeIssue({
     github,
     agentTasks,
     issueNumber,
-    baseRef: repository.default_branch,
     headRef,
     headSha,
     sequence: 1,
     attempt: 1,
+    summaryHeading: 'AutoDev initialized; Research started',
     now,
   });
   return Object.freeze({

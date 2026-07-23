@@ -42,11 +42,11 @@ export async function startResearch({
   github,
   agentTasks,
   issueNumber,
-  baseRef,
   headRef,
   headSha,
   sequence,
   attempt,
+  summaryHeading = 'AutoDev Research started',
   now = () => new Date(),
 }) {
   const issue = await github.getIssue(issueNumber);
@@ -60,7 +60,6 @@ export async function startResearch({
   });
   const execution = await agentTasks.startTask({
     prompt,
-    baseRef,
     headRef,
     customAgent: CUSTOM_AGENTS[STATES.RESEARCH],
   });
@@ -83,7 +82,7 @@ export async function startResearch({
     issueNumber,
     formatTaskComment(
       task,
-      `### AutoDev Research started\n\n${executionLink} is working on \`${headRef}\`.`,
+      `### ${summaryHeading}\n\n${executionLink} is working on \`${headRef}\`.`,
     ),
   );
 

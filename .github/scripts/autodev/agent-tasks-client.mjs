@@ -134,14 +134,12 @@ export class AgentTasksClient {
 
   async startTask({
     prompt,
-    baseRef,
     headRef,
     customAgent,
     model,
   }) {
     for (const [fieldName, value] of Object.entries({
       prompt,
-      baseRef,
       headRef,
       customAgent,
     })) {
@@ -150,7 +148,6 @@ export class AgentTasksClient {
 
     const body = {
       prompt,
-      base_ref: baseRef,
       head_ref: headRef,
       custom_agent: customAgent,
       create_pull_request: false,

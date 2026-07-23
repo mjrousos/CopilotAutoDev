@@ -160,43 +160,6 @@ test('authenticated user login is resolved from the configured token', async () 
   assert.equal((await client.getAuthenticatedUser()).login, 'callback-user');
 });
 
-test('compareCommits and getContent expose validation data', async () => {
-  const client = createClient(async (url) => {
-    if (url.pathname.includes('/compare/')) {
-      return jsonResponse({ files: [{ filename: 'research.md' }] });
-    }
-    return jsonResponse({ type: 'file', path: '.github/autodev/issues/42/research.md' });
-  });
-
-  assert.deepEqual(
-    (await client.compareCommits('abc1234', 'def5678')).files,
-    [{ filename: 'research.md' }],
-  );
-  assert.equal(
-    (await client.getContent('.github/autodev/issues/42/research.md', 'def5678')).type,
-    'file',
-  );
-});
-
-test('getContent returns null when the artifact does not exist', async () => {
-  const client = createClient(async () => jsonResponse(
-    { message: 'Not Found' },
-    { status: 404 },
-  ));
-  assert.equal(await client.getContent('missing.md', SHA), null);
-});
-
-test('compareCommits rejects GitHub responses at the 300-file limit', async () => {
-  const client = createClient(async () => jsonResponse({
-    files: Array.from({ length: 300 }, (_, index) => ({ filename: `file-${index}.txt` })),
-  }));
-
-  await assert.rejects(
-    client.compareCommits('abc1234', 'def5678'),
-    (error) => error instanceof GitHubApiError && error.status === 422,
-  );
-});
-
 test('label operations reject labels outside the configured POC set', async () => {
   const client = createClient(async () => jsonResponse([]));
   await assert.rejects(

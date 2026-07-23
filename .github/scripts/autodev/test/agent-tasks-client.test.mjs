@@ -32,7 +32,6 @@ test('startTask sends the custom agent to the existing issue branch', async () =
 
   const task = await client.startTask({
     prompt: 'Research issue 42.',
-    baseRef: 'main',
     headRef: 'autodev/issue-42',
     customAgent: 'autodev-research',
   });
@@ -41,7 +40,6 @@ test('startTask sends the custom agent to the existing issue branch', async () =
   assert.equal(request.options.headers['X-GitHub-Api-Version'], '2026-03-10');
   assert.deepEqual(JSON.parse(request.options.body), {
     prompt: 'Research issue 42.',
-    base_ref: 'main',
     head_ref: 'autodev/issue-42',
     custom_agent: 'autodev-research',
     create_pull_request: false,

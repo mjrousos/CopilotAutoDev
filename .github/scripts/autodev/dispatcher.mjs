@@ -14,7 +14,6 @@ import {
   TASK_MARKER,
 } from './task.mjs';
 import { isTrustedHumanComment } from './validation.mjs';
-import { enterDesign } from './handlers/design.mjs';
 import { initializeIssue } from './handlers/initialization.mjs';
 
 export const INVALID_STATE = 'invalid';
@@ -113,15 +112,6 @@ export async function dispatchAutoDevEvent({
           github,
           agentTasks,
           issueNumber,
-          orchestratorLogin,
-          now,
-        });
-      case STATES.DESIGN:
-        return enterDesign({
-          github,
-          agentTasks,
-          issueNumber,
-          result: determination.result,
           orchestratorLogin,
           now,
         });

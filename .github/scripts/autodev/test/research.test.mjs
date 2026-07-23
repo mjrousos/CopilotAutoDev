@@ -70,7 +70,6 @@ test('startResearch launches the custom agent and records its task ID', async ()
     github,
     agentTasks,
     issueNumber: 42,
-    baseRef: 'main',
     headRef: 'autodev/issue-42',
     headSha: SHA,
     sequence: 1,
@@ -79,9 +78,38 @@ test('startResearch launches the custom agent and records its task ID', async ()
   });
 
   assert.equal(startRequest.customAgent, 'autodev-research');
-  assert.equal(startRequest.baseRef, 'main');
+  assert.equal(startRequest.baseRef, undefined);
   assert.equal(startRequest.headRef, 'autodev/issue-42');
   assert.equal(result.task.state, STATES.RESEARCH);
   assert.equal(result.task.executionId, 'task-123');
   assert.match(comments[0], /autodev-task:v1/);
+});
+
+test('startResearch can customize the visible Initialization heading', async () => {
+  const comments = [];
+  const result = await startResearch({
+    github: {
+      async getIssue() {
+        return { title: 'Issue', body: 'Body', html_url: 'https://example.test/6' };
+      },
+      async createIssueComment(_issueNumber, body) {
+        comments.push(body);
+        return { id: 1, body };
+      },
+    },
+    agentTasks: {
+      async startTask() {
+        return { id: 'task-456', state: 'queued' };
+      },
+    },
+    issueNumber: 6,
+    headRef: 'autodev/issue-6',
+    headSha: SHA,
+    sequence: 1,
+    attempt: 1,
+    summaryHeading: 'AutoDev initialized; Research started',
+  });
+
+  assert.equal(result.status, 'research-started');
+  assert.match(comments[0], /### AutoDev initialized; Research started/);
 });

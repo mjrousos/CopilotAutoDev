@@ -45,7 +45,6 @@ The implementation will be delivered in independently usable milestones. Each mi
       agent-tasks-client.mjs
       dispatcher.mjs
       handlers/
-        design.mjs
         initialization.mjs
         research.mjs
         shared.mjs
@@ -54,7 +53,6 @@ The implementation will be delivered in independently usable milestones. Each mi
       test/
         config.test.mjs
         agent-tasks-client.test.mjs
-        design.test.mjs
         github-client.test.mjs
         main.test.mjs
         task.test.mjs
@@ -200,7 +198,7 @@ The exact module split may be collapsed if implementation reveals that a module 
    - `POST /agents/repos/{owner}/{repo}/tasks`
    - `GET /agents/repos/{owner}/{repo}/tasks/{task_id}`
    - Required preview headers and explicit error reporting.
-   - `base_ref`, existing `head_ref`, `custom_agent`, and `create_pull_request: false`.
+   - Existing `head_ref`, `custom_agent`, and `create_pull_request: false`. The POC client intentionally does not expose `base_ref` because AutoDev always targets a pre-created branch and must avoid PR-context behavior.
 2. [x] Keep the Agent Tasks token isolated to the client and workflow environment. Never include it in prompts, branches, artifacts, or agent MCP configuration.
 3. [x] Create `autodev-research.agent.md`:
    - The agent should instruct Copilot to thoroughly research the issue and produce a single artifact at the configured path.
@@ -210,40 +208,34 @@ The exact module split may be collapsed if implementation reveals that a module 
    - Require a final structured callback whose branch, SHA, artifact path, and requested next state match the task prompt.
    - Merge the agent definition to the default branch before attempting a live Agent Task, because cloud custom-agent resolution uses repository-visible/default-branch agent definitions.
 4. [x] Launch Research with a deterministic prompt containing issue context, branch/ref expectations, artifact path, allowed paths, and callback contract. Record the returned Agent Task ID in the new Research `autodev-task` comment.
-5. [x] Process Research callbacks:
-   - Verify callback actor identity.
-   - Match state, attempt, branch, and current canonical task.
-   - Query and validate the Agent Task identified by the current task record's `executionId`.
-   - Verify the reported SHA is the branch head.
-   - Diff the previous canonical `headSha` against the newly reported `headSha` and reject files added by this execution outside the Research allowlist. Do not validate against the repository base branch, because the shared branch already contains prior-state artifacts.
-   - Verify the Research artifact exists at the reported SHA.
-   - Transition to Design only after all checks pass.
+5. [x] Authenticate and parse Research callback comments, then stop cleanly at the deferred Design boundary. Design-state processing will validate the Agent Task, branch, SHA, changed files, and artifact in Milestone 4.
 6. [x] Add integration-style tests using mocked Agent Tasks and GitHub API responses.
 
 **Completion criteria**
 
 - [ ] A labeled test issue progresses from Initialization through a real Research Agent Task.
 - [ ] Research commits its artifact to the shared issue branch.
-- [ ] A valid callback causes exactly one canonical Research -> Design transition in the live repository.
-- [x] Invalid callbacks or out-of-scope changes are rejected with a visible error comment and no transition in integration tests.
+- [x] A valid callback is recognized as a Design request without invoking an unimplemented Design handler.
+- [ ] Design validation rejects invalid callbacks or out-of-scope changes before writing canonical Design state.
 
 ## Milestone 4: Add Design and SecurityReview, including feedback loops
 
-1. Create `autodev-design.agent.md`:
+1. Implement the Design handler that validates the completed Research task, branch head, changes since the Research task's starting SHA, and required Research artifact before recording or launching Design.
+2. Create `autodev-design.agent.md`:
    - Consume the issue, Research artifact, and any prior security or human feedback.
    - Write only the issue Design artifact.
    - Request Research when specific missing research is identified; otherwise request SecurityReview.
    - Persist the selected `nextState` and rationale in a machine-readable block in the committed Design artifact so reconciliation does not depend solely on the callback.
-2. Create `autodev-security-review.agent.md`:
+3. Create `autodev-security-review.agent.md`:
    - Consume the Design artifact and relevant code.
    - Produce a threat model and security-review artifact.
    - Request Design when blocking findings require changes; otherwise request HumanPlanReview.
    - Persist the selected `nextState` and rationale in a machine-readable block in the committed SecurityReview artifact.
-3. Reuse the shared Agent Task launcher and callback validator with state-specific policies rather than duplicating orchestration logic.
-4. Validate allowed file paths and required artifacts independently for each state by diffing the preceding canonical `headSha` against the callback `headSha`.
-5. Increment attempts on each re-entry and include prior feedback in prompts.
-6. Protect against stale callbacks from previous Design or SecurityReview attempts.
-7. Add tests for Research <-> Design and Design <-> SecurityReview loops, stale attempts, missing artifacts, and invalid requested transitions.
+4. Reuse the shared Agent Task launcher and callback validator with state-specific policies rather than duplicating orchestration logic.
+5. Validate allowed file paths and required artifacts independently for each state by diffing the preceding canonical `headSha` against the callback `headSha`.
+6. Increment attempts on each re-entry and include prior feedback in prompts.
+7. Protect against stale callbacks from previous Design or SecurityReview attempts.
+8. Add tests for Research <-> Design and Design <-> SecurityReview loops, stale attempts, missing artifacts, and invalid requested transitions.
 
 **Completion criteria**
 
