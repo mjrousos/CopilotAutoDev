@@ -7,7 +7,7 @@ import {
   SCHEMA_VERSION,
   STATES,
 } from '../config.mjs';
-import { RESULT_OUTCOMES } from '../comments.mjs';
+import { ContractValidationError, RESULT_OUTCOMES } from '../comments.mjs';
 import { formatTaskComment } from '../task.mjs';
 import {
   advanceToResearch,
@@ -162,6 +162,10 @@ test('advanceToResearch validates the handoff and launches Research on the issue
     async getIssueComments() {
       return comments;
     },
+    async getRef(ref) {
+      assert.equal(ref, 'heads/autodev/issue-42');
+      return { ref: `refs/${ref}`, object: { sha: SHA } };
+    },
     async getRepository() {
       return { default_branch: 'main' };
     },
@@ -194,6 +198,36 @@ test('advanceToResearch validates the handoff and launches Research on the issue
   assert.equal(result.task.headSha, SHA);
   assert.equal(startRequest.baseRef, 'main');
   assert.equal(startRequest.headRef, 'autodev/issue-42');
+});
+
+test('advanceToResearch rejects a handoff when the branch head drifted', async () => {
+  const comments = [initializationComment()];
+  const github = {
+    async getIssueComments() {
+      return comments;
+    },
+    async getRef() {
+      return { object: { sha: '1111111111111111111111111111111111111111' } };
+    },
+    async getRepository() {
+      throw new Error('must reject before reading the repository');
+    },
+  };
+  const agentTasks = {
+    async startTask() {
+      throw new Error('Research must not start from a drifted head');
+    },
+  };
+
+  await assert.rejects(
+    advanceToResearch({
+      github,
+      agentTasks,
+      issueNumber: 42,
+      result: handoffResult(),
+    }),
+    (error) => error instanceof ContractValidationError && error.code === 'stale-head-sha',
+  );
 });
 
 test('advanceToResearch ignores handoffs once Research has already started', async () => {

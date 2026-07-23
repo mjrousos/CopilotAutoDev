@@ -255,6 +255,9 @@ test('an initialization handoff result launches Research in the follow-up run', 
     async getIssueComments() {
       return comments;
     },
+    async getRef() {
+      return { object: { sha: SHA } };
+    },
     async getRepository() {
       return { default_branch: 'main' };
     },

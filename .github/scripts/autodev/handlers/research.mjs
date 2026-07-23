@@ -133,6 +133,20 @@ export async function advanceToResearch({
 
   validateTransitionRequest(currentTask, result);
 
+  // Guard against out-of-band branch changes (force-push, manual commits) since
+  // Initialization recorded the head. Research must start from the exact SHA the
+  // canonical Initialization task and handoff validated against; otherwise later
+  // SHA-based validation would compare against a head Research never saw.
+  const liveHead = await github.getRef(`heads/${currentTask.headRef}`);
+  const liveHeadSha = liveHead?.object?.sha;
+  if (liveHeadSha !== currentTask.headSha) {
+    throw new ContractValidationError(
+      'stale-head-sha',
+      `Issue branch ${currentTask.headRef} head ${liveHeadSha ?? 'missing'} no longer matches `
+        + `the recorded Initialization head ${currentTask.headSha}.`,
+    );
+  }
+
   const repository = await github.getRepository();
   const baseRef = repository.default_branch;
   if (typeof baseRef !== 'string' || baseRef.length === 0) {
