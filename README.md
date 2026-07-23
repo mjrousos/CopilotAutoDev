@@ -10,6 +10,7 @@ See:
 ## POC prerequisites
 
 - GitHub Actions and Copilot cloud agent must be enabled for the repository.
+- **Important:** Under **Settings > Actions > General > Workflow permissions**, enable **Allow GitHub Actions to create and approve pull requests**. The orchestrator's Initialization state uses the workflow `GITHUB_TOKEN` to open the issue tracking pull request; without this setting, PR creation fails with `403 Resource not accessible by integration` even though the workflow grants `pull-requests: write`.
 - The user represented by the Agent Tasks credential must have write access to the repository and a Copilot plan for which the Agent Tasks API is enabled. The current REST API documentation lists Copilot Business or Enterprise for starting tasks.
 - A repository administrator must configure Actions secrets, Copilot Agents secrets, repository MCP access, and labels before running the POC.
 - `gh` and `gh-aw` v0.82.14 are needed to author or compile the CodeReview Agentic Workflow. The checked-in `copilot-setup-steps.yml` installs this version in Copilot cloud-agent sessions. A compiled `.lock.yml` workflow does not require the gh-aw CLI at runtime.
