@@ -347,12 +347,14 @@ test('the compiled Research workflow and its callback safe output are committed'
 
   // The dispatched workflow file name must match config.WORKFLOWS[research].
   assert.match(lock, /# This file was automatically generated/i);
-  // The worker must push only research artifacts (a static allowed-files glob,
-  // since gh-aw cannot template allowed-files with dispatch inputs) and call
-  // back via the callback identity with the autodev-result marker.
+  // gh-aw validates the whole PR diff, which always includes the init scaffold,
+  // so the worker does not use a per-file allowlist; protected-files: allowed
+  // lets the scaffold through and the orchestrator's change policy is the
+  // authoritative guard. The worker pushes to the PR and calls back via the
+  // callback identity with the autodev-result marker.
   assert.match(source, /push-to-pull-request-branch:/);
-  assert.match(source, /allowed-files:/);
-  assert.match(source, /autodev\/issues\/\*\/research\.md/);
+  assert.match(source, /protected-files: "allowed"/);
+  assert.doesNotMatch(source, /allowed-files:/);
   assert.match(source, /add-comment:/);
   assert.match(source, /AUTODEV_CALLBACK_TOKEN/);
   assert.match(source, /autodev-result:v1/);

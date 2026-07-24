@@ -54,14 +54,15 @@ safe-outputs:
   push-to-pull-request-branch:
     target: "${{ inputs.pull_request_number }}"
     if-no-changes: "error"
-    allowed-files:
-      # gh-aw evaluates allowed-files at the agent's safeoutputs tool boundary,
-      # where dispatch-input env vars are NOT populated, so it cannot be
-      # templated with ${{ inputs.artifact_path }} (that resolved to an empty
-      # GH_AW_INPUT_ARTIFACT_PATH and rejected every path). Use a static glob;
-      # the exact push target is still pinned to the dispatched pull request, and
-      # the orchestrator re-validates changed files against its change policy.
-      - "autodev/issues/*/research.md"
+    # gh-aw validates the ENTIRE pull-request diff (base..head), not just this
+    # run's new commit. AutoDev's issue branch always also contains the
+    # initialization scaffold (autodev/issues/<n>/README.md) and, for later
+    # states, all prior artifacts — so a per-file allowlist can never match the
+    # whole diff and blocks the push. We therefore do not filter files here;
+    # `protected-files: allowed` lets the scaffold README through, and the
+    # orchestrator's change policy (validated against the preceding canonical
+    # headSha) remains the authoritative, correctly-scoped guard on changed files.
+    protected-files: "allowed"
   add-comment:
     target: "${{ inputs.issue_number }}"
     max: 1
