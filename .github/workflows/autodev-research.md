@@ -39,6 +39,13 @@ engine: copilot
 network: defaults
 concurrency:
   group: "autodev-research-issue-${{ inputs.issue_number }}"
+checkout:
+  # push-to-pull-request-branch needs full history and the issue branch fetched
+  # so it can compute the merge-base and push only the incremental artifact.
+  # Without this the shallow default checkout treats the whole repo as changed
+  # and allowed-files rejects the push.
+  fetch-depth: 0
+  fetch: ["*"]
 tools:
   github:
     mode: gh-proxy
