@@ -110,4 +110,4 @@ Field requirements:
 
 ## If research cannot be completed
 
-Do not push a partial artifact and do not post an `autodev-result` marker. Post a comment explaining the blocker using `add-comment`, and use `report-incomplete` so the run is tracked as failed rather than a silent success.
+Do not push a partial artifact and do not post an `autodev-result` marker. Post a comment explaining the blocker using `add-comment` (with no result marker). If the blocker is a missing capability or missing input, also call `missing-tool` or `missing-data` respectively. Never claim success when research is incomplete.

@@ -121,6 +121,13 @@ export async function advanceToResearch({
   correlationId = randomUUID(),
   now = () => new Date(),
 }) {
+  if (
+    dispatchRef !== undefined
+    && (typeof dispatchRef !== 'string' || dispatchRef.trim().length === 0)
+  ) {
+    throw new TypeError('dispatchRef must be a non-empty string when provided.');
+  }
+
   const canonical = await loadCanonicalTask({
     github,
     issueNumber,

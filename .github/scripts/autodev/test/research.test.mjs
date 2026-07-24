@@ -258,6 +258,18 @@ test('advanceToResearch blocks when no tracking pull request exists', async () =
   );
 });
 
+test('advanceToResearch rejects a blank dispatchRef override', async () => {
+  await assert.rejects(
+    advanceToResearch({
+      github: {},
+      issueNumber: 42,
+      result: handoffResult(),
+      dispatchRef: '   ',
+    }),
+    (error) => error instanceof TypeError && /dispatchRef/.test(error.message),
+  );
+});
+
 test('advanceToResearch rejects a handoff when the branch head drifted', async () => {
   const comments = [initializationComment()];
   const github = {
