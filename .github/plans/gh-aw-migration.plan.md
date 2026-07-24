@@ -144,6 +144,28 @@ Running the Copilot CLI headless as an orchestrator step is the most controllabl
 
 ## Follow-on (only if the spike succeeds)
 
-1. Migrate Design, SecurityReview, and Implementation to gh-aw using the same dispatch-and-callback shape and their existing per-state change policies and decision blocks.
+1. Migrate Design, SecurityReview, and Implementation to gh-aw using the same dispatch-and-callback shape and their existing per-state change policies and decision blocks. Implementation needs broad file-write access — see "Broad file-write access for Implementation" below.
 2. Remove the now-unused `agent-tasks-client.mjs`, its tests, the `AUTODEV_AGENT_TASKS_TOKEN` secret, and `autodev-research.agent.md`; update `README.md` and `initial-implementation.plan.md` to describe gh-aw as the single execution model.
 3. Reassess whether the async callback handshake is still needed per state or whether some states can run synchronously.
+
+## Broad file-write access for Implementation
+
+Research pins its push safe output to a single artifact, but Implementation must modify application code broadly. gh-aw supports this; the following was verified against gh-aw v0.82.14 docs, the compiled lock, and the gh-aw issue tracker.
+
+- **Broad write is supported.** `create-pull-request` and `push-to-pull-request-branch` treat `allowed-files` as an *exclusive allowlist*; omit it (or use `["**"]`) and the agent may modify any non-protected file. Use `excluded-files` to subtract paths. This is the designed coding-agent use case, not a limitation.
+- **Protected-files list (configurable).** Package manifests and lockfiles (`package.json`, `*.lock`, …), `README.md`, `DESIGN.md`, `CODEOWNERS`, security configs, and agent-instruction files are refused by default (`push-to-pull-request-branch` default `blocked`; `create-pull-request` default `request_review`). Implementation legitimately edits manifests when changing dependencies, so set `protected-files: allowed` (or the object form to permit specific files). This is a frontmatter switch.
+- **Top-level dot-folders (`.github/`) are hard-blocked and NOT overridable.** `protect_top_level_dot_folders` / `protected_path_prefixes` refuses any `.github/**` change; neither `allowed-files` nor `protected-files: allowed` bypasses it (verified empirically last session; gh-aw#20513 confirms there is no clean frontmatter switch — only a fragile lock-file edit that resets on recompile, which we will not do). The only sanctioned escape is `allow-workflows: true` plus a GitHub App identity, and only for `.github/workflows/`.
+- **Patch caps.** Raise `max-patch-files` (default `100`) and `max-patch-size` (default `4096` KB, max `10240`) for large changes. Both are real frontmatter fields (the lock already emits `max_patch_size`).
+
+### Mapping to AutoDev's Implementation change policy
+
+`getStateChangePolicy(IMPLEMENTATION)` allows `**` and denies `autodev/issues/**`, `.github/scripts/autodev/**`, `.github/agents/autodev-*.agent.md`, and `.github/workflows/autodev-*`. This maps cleanly onto gh-aw:
+
+- The `.github/**` denies are enforced *for free* by gh-aw's dot-folder protection — Implementation cannot rewrite AutoDev's own control plane, which is the intended behavior.
+- The `autodev/issues/**` deny (protecting approved artifacts) is a normal path, expressed as `excluded-files: ["autodev/issues/**"]`.
+- Suggested Implementation safe output: push to the existing tracking PR via `push-to-pull-request-branch` with `allowed-files: ["**"]`, `excluded-files: ["autodev/issues/**"]`, `protected-files: allowed`, and raised `max-patch-files`/`max-patch-size`.
+- **The orchestrator's `getStateChangePolicy` validation remains the authoritative post-hoc check** (changed files diffed against the preceding canonical `headSha`); gh-aw's allow/exclude is only the worker-side guardrail. This preserves the existing "validate files changed by an execution" convention.
+
+### Known limitation
+
+If an Implementation task ever needs to modify a *non-AutoDev* `.github/` file (for example the application's own CI unrelated to AutoDev), safe outputs cannot do it except `.github/workflows/` via a GitHub App. For most feature work this never arises and is arguably desirable. If it becomes necessary, the escape hatch is a custom `safe-outputs.jobs:` step that commits via the API, or the Copilot CLI fallback named earlier in this plan.
