@@ -256,6 +256,19 @@ test('dispatchWorkflow rejects non-object inputs', async () => {
   );
 });
 
+test('dispatchWorkflow trims surrounding whitespace from the ref and workflow name', async () => {
+  let request;
+  const client = createClient(async (url, options) => {
+    request = { url: url.toString(), body: options.body };
+    return new Response(null, { status: 204 });
+  });
+
+  await client.dispatchWorkflow(' autodev-research.lock.yml ', 'main ', { issue_number: '42' });
+
+  assert.match(request.url, /\/actions\/workflows\/autodev-research\.lock\.yml\/dispatches$/);
+  assert.equal(JSON.parse(request.body).ref, 'main');
+});
+
 test('issue comments use the configured authorization token', async () => {
   let authorization;
   const client = createClient(async (_url, options) => {

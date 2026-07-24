@@ -288,11 +288,14 @@ export class GitHubClient {
     if (inputs === null || typeof inputs !== 'object' || Array.isArray(inputs)) {
       throw new TypeError('inputs must be an object.');
     }
+    // Normalize the ref: assertNonEmptyString accepts surrounding whitespace, so
+    // trim before sending to avoid a ref like "main " failing at the API.
+    const normalizedRef = ref.trim();
     // The dispatch endpoint returns 204 No Content on success.
     await this.request(
       'POST',
-      this.repositoryPath(`/actions/workflows/${encodeURIComponent(workflowFileName)}/dispatches`),
-      { body: { ref, inputs } },
+      this.repositoryPath(`/actions/workflows/${encodeURIComponent(workflowFileName.trim())}/dispatches`),
+      { body: { ref: normalizedRef, inputs } },
     );
   }
 
