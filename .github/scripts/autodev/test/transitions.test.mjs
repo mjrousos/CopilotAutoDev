@@ -41,7 +41,7 @@ function createResult(overrides = {}) {
     decisionRationale: 'Work completed.',
     headRef: 'autodev/issue-42',
     headSha: NEXT_SHA,
-    artifacts: ['.github/autodev/issues/42/research.md'],
+    artifacts: ['autodev/issues/42/research.md'],
     ...overrides,
   };
 }

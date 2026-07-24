@@ -168,7 +168,7 @@ test('invalid result comments receive a visible error without a transition', asy
     eventPayload: {
       issue: { number: 42 },
       comment: {
-        body: '<!-- autodev-result:v1\n{broken}\n-->',
+        body: '```autodev-result:v1\n{broken}\n```',
         user: { login: 'callback-bot' },
         author_association: 'NONE',
       },
@@ -250,7 +250,7 @@ test('an initialization handoff result launches Research in the follow-up run', 
     }),
     user: { login: DEFAULT_ORCHESTRATOR_LOGIN },
   }];
-  const started = [];
+  const dispatched = [];
   const github = {
     async getIssueComments() {
       return comments;
@@ -261,24 +261,20 @@ test('an initialization handoff result launches Research in the follow-up run', 
     async getRepository() {
       return { default_branch: 'main' };
     },
-    async getIssue() {
-      return { title: 'Issue', body: 'Body', html_url: 'https://example.test/42' };
+    async findPullRequest() {
+      return { number: 55, html_url: 'https://example.test/pull/55' };
+    },
+    async dispatchWorkflow(workflowFileName, ref, inputs) {
+      dispatched.push({ workflowFileName, ref, inputs });
     },
     async createIssueComment(_issueNumber, body) {
       comments.push({ id: comments.length + 1, body, user: { login: DEFAULT_ORCHESTRATOR_LOGIN } });
       return { id: comments.length, body };
     },
   };
-  const agentTasks = {
-    async startTask(request) {
-      started.push(request);
-      return { id: 'task-r', state: 'queued', html_url: 'https://example.test/task-r' };
-    },
-  };
 
   const result = await dispatchAutoDevEvent({
     github,
-    agentTasks,
     eventName: 'issue_comment',
     eventPayload: {
       issue: { number: 42 },
@@ -293,7 +289,9 @@ test('an initialization handoff result launches Research in the follow-up run', 
   });
 
   assert.equal(result.status, 'research-started');
-  assert.equal(started.length, 1);
-  assert.equal(started[0].baseRef, 'main');
-  assert.equal(started[0].headRef, 'autodev/issue-42');
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0].workflowFileName, 'autodev-research.lock.yml');
+  assert.equal(dispatched[0].ref, 'main');
+  assert.equal(dispatched[0].inputs.head_ref, 'autodev/issue-42');
+  assert.equal(dispatched[0].inputs.pull_request_number, '55');
 });

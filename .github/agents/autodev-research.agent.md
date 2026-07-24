@@ -28,10 +28,10 @@ Do not modify any file other than the supplied research artifact. Do not create 
 
 ## Result callback
 
-After committing the artifact, retrieve the committed branch head SHA. Add one issue comment containing a concise visible summary followed by exactly one result marker (or, if research cannot be completed, a visible blocker explanation without a result marker). The result marker must be formatted as follows:
+After committing the artifact, retrieve the committed branch head SHA. Add one issue comment containing a concise visible summary followed by exactly one result marker (or, if research cannot be completed, a visible blocker explanation without a result marker). The marker is a fenced code block whose info string is `autodev-result:v1` (do not use an HTML comment — it would be stripped by safe-output sanitization). Format it as follows:
 
-```text
-<!-- autodev-result:v1
+````text
+```autodev-result:v1
 {
   "schemaVersion": 1,
   "issue": 42,
@@ -42,10 +42,10 @@ After committing the artifact, retrieve the committed branch head SHA. Add one i
   "decisionRationale": "Research is complete and provides enough information to design the solution.",
   "headRef": "autodev/issue-42",
   "headSha": "0123456789abcdef0123456789abcdef01234567",
-  "artifacts": [".github/autodev/issues/42/research.md"]
+  "artifacts": ["autodev/issues/42/research.md"]
 }
--->
 ```
+````
 
 Replace the example issue number, attempt, branch, SHA, and artifact path with the exact values supplied by the task prompt or produced by the committed work.
 

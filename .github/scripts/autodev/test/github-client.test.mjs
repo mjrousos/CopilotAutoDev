@@ -148,20 +148,20 @@ test('createOrUpdateFile seeds a new file without a blob SHA', async () => {
       return jsonResponse({ message: 'Not Found' }, { status: 404 });
     }
     return jsonResponse(
-      { content: { path: '.github/autodev/issues/42/README.md' }, commit: { sha: SHA } },
+      { content: { path: 'autodev/issues/42/README.md' }, commit: { sha: SHA } },
       { status: 201 },
     );
   });
 
   const result = await client.createOrUpdateFile({
-    path: '.github/autodev/issues/42/README.md',
+    path: 'autodev/issues/42/README.md',
     message: 'seed',
     content: '# hello',
     branch: 'autodev/issue-42',
   });
 
   assert.equal(result.commit.sha, SHA);
-  assert.match(requests[0].url, /contents\/\.github\/autodev\/issues\/42\/README\.md/);
+  assert.match(requests[0].url, /contents\/autodev\/issues\/42\/README\.md/);
   assert.equal(requests[1].options.method, 'PUT');
   const putBody = JSON.parse(requests[1].options.body);
   assert.equal(putBody.branch, 'autodev/issue-42');
@@ -226,6 +226,47 @@ test('ensurePullRequest opens a pull request when none is open', async () => {
   assert.deepEqual(JSON.parse(requests[1].body), {
     title: 'AutoDev: Test', head: 'autodev/issue-42', base: 'main', body: 'tracking',
   });
+});
+
+test('dispatchWorkflow posts ref and inputs to the workflow dispatch endpoint', async () => {
+  let request;
+  const client = createClient(async (url, options) => {
+    request = { url: url.toString(), method: options.method, body: options.body };
+    return new Response(null, { status: 204 });
+  });
+
+  await client.dispatchWorkflow('autodev-research.lock.yml', 'main', {
+    issue_number: '42',
+    head_ref: 'autodev/issue-42',
+  });
+
+  assert.match(request.url, /\/actions\/workflows\/autodev-research\.lock\.yml\/dispatches$/);
+  assert.equal(request.method, 'POST');
+  assert.deepEqual(JSON.parse(request.body), {
+    ref: 'main',
+    inputs: { issue_number: '42', head_ref: 'autodev/issue-42' },
+  });
+});
+
+test('dispatchWorkflow rejects non-object inputs', async () => {
+  const client = createClient(async () => new Response(null, { status: 204 }));
+  await assert.rejects(
+    client.dispatchWorkflow('wf.lock.yml', 'main', ['not', 'an', 'object']),
+    /inputs must be an object/,
+  );
+});
+
+test('dispatchWorkflow trims surrounding whitespace from the ref and workflow name', async () => {
+  let request;
+  const client = createClient(async (url, options) => {
+    request = { url: url.toString(), body: options.body };
+    return new Response(null, { status: 204 });
+  });
+
+  await client.dispatchWorkflow(' autodev-research.lock.yml ', 'main ', { issue_number: '42' });
+
+  assert.match(request.url, /\/actions\/workflows\/autodev-research\.lock\.yml\/dispatches$/);
+  assert.equal(JSON.parse(request.body).ref, 'main');
 });
 
 test('issue comments use the configured authorization token', async () => {

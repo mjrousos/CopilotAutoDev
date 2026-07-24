@@ -2,7 +2,16 @@
 
 ## Status
 
-Proposed. This plan covers a single reversible spike: re-implement the **Research** state as a GitHub Agentic Workflow (gh-aw) instead of a Copilot Agent Task. It does not change any other state. If the spike succeeds, a follow-on plan will migrate Design, SecurityReview, and Implementation and retire the Agent Tasks client.
+In progress. Phases 1–4 (author, compile, wire, test) are implemented on branch `spike/gh-aw-research`, plus the post-review adaptations below. Phase 5 (live validation) is pending: it requires merging the workflow and wiring to the default branch and labeling a fresh test issue, then observing the runs. This plan covers a single reversible spike: re-implement the **Research** state as a GitHub Agentic Workflow (gh-aw) instead of a Copilot Agent Task. It does not change any other state. If the spike succeeds, a follow-on plan will migrate Design, SecurityReview, and Implementation and retire the Agent Tasks client.
+
+## Code review findings and adaptations
+
+A code review of the initial spike surfaced structural conflicts between gh-aw's safe-outputs model and AutoDev's original design. All are verified against gh-aw v0.82.14 docs and the compiled lock, and the following adaptations were made:
+
+1. **gh-aw sanitizes safe-output bodies and strips HTML/XML comments** (`removeXmlComments`; gh-aw#18992). AutoDev's `<!-- autodev-result:v1 -->` marker would be silently removed, so the callback would never retrigger the orchestrator. **Adaptation:** all versioned markers (`autodev-task`, `autodev-result`, `autodev-decision`) are now emitted as fenced code blocks (```` ```<marker>:vN ````), which survive sanitization. `comments.mjs` (`extractVersionedMarker`/`formatVersionedMarker`), the dispatcher's canonical-comment guard, and the orchestrator's `issue_comment` trigger filter were updated accordingly.
+2. **gh-aw `push-to-pull-request-branch` refuses patches touching top-level dot-folders** (`protect_top_level_dot_folders`), and neither `allowed-files` nor `protected-files: allowed` overrides it (verified empirically). AutoDev artifacts under `.github/autodev/issues/` could never be committed. **Adaptation:** artifacts moved to `autodev/issues/<n>/` (outside `.github/`); `config.mjs` paths and the Implementation change policy's deny-list were updated.
+3. **The generated concurrency group collapsed all `workflow_dispatch` runs** (group keyed on `github.ref` = `refs/heads/main`, `cancel-in-progress: true`), so a second issue's Research would cancel the first. **Adaptation:** the workflow declares an issue-specific concurrency group `autodev-research-issue-${{ inputs.issue_number }}`.
+4. **The agent job checks out the default branch, not the tracking PR branch** (the PR checkout step only runs for PR-context events). The push safe-outputs job checks out the PR branch itself and applies the agent's patch, so a new-file artifact still lands append-only; the residual effect is that the agent researches from `main`. Tracked for live validation.
 
 ## Problem and approach
 
@@ -62,7 +71,7 @@ Running the Copilot CLI headless as an orchestrator step is the most controllabl
    - `issue_number`
    - `head_ref` (the issue branch, `autodev/issue-<n>`)
    - `head_sha` (the canonical Initialization/most-recent head SHA)
-   - `artifact_path` (`.github/autodev/issues/<n>/research.md`)
+   - `artifact_path` (`autodev/issues/<n>/research.md`)
    - `attempt`
    - `correlation_id` (caller-generated; becomes the canonical `executionId`)
 2. Configure the agent job for least privilege:
@@ -85,20 +94,22 @@ Running the Copilot CLI headless as an orchestrator step is the most controllabl
 
 ### Phase 3: Wire the orchestrator to dispatch the workflow
 
-1. In `config.mjs`, change the Research handler mapping from `AGENT_TASK` to `AGENTIC_WORKFLOW`, and add any Research-specific workflow file name/dispatch constants. Keep all state, transition, label, and change-policy definitions in `config.mjs`.
-2. Add a minimal `dispatchWorkflow` operation to `github-client.mjs` (`POST /repos/{owner}/{repo}/actions/workflows/{workflow}/dispatches`) only now that a state uses it. Add `actions: write` to the orchestrator workflow permissions at the same time.
+1. In `config.mjs`, add the Research workflow file constant (`WORKFLOWS[research] = 'autodev-research.lock.yml'`). **Implementation note:** do NOT remap the Research handler to `AGENTIC_WORKFLOW`. That handler type enforces an unchanged `headSha` (correct for read-only CodeReview), but Research advances the branch. Research keeps `AGENT_TASK` transition semantics; only its launch mechanism changes. Handler type (transition semantics) is intentionally decoupled from launch substrate (workflow dispatch).
+2. Add a minimal `dispatchWorkflow` operation to `github-client.mjs` (`POST /repos/{owner}/{repo}/actions/workflows/{workflow}/dispatches`, 204 No Content) only now that a state uses it. Add `actions: write` to the orchestrator workflow permissions at the same time.
 3. Replace the Agent Task launch inside `advanceToResearch` (`handlers/research.mjs`) with a workflow dispatch:
    - Preserve the existing canonical guards: load canonical state, require `Initialization`, validate the transition, and re-fetch the live branch head and reject on `stale-head-sha`.
-   - Generate the `correlation_id`, dispatch the workflow with the inputs above, and record a canonical Research `autodev-task` comment whose `executionId` is the `correlation_id` (workflow_dispatch does not return a run ID).
-4. Keep the callback path unchanged: the orchestrator continues to accept a callback-identity `autodev-result:v1` comment and validate it with the existing transition validator, including the changed-files check against the preceding canonical `headSha`.
+   - Resolve the tracking pull request number via the existing `findPullRequest(headRef, defaultBranch)` and reject with `missing-tracking-pull-request` if absent (the push-to-pull-request-branch safe output targets it).
+   - Generate the `correlation_id`, dispatch the workflow on the default branch with string-typed inputs (issue number, head ref, head SHA, pull request number, artifact path, attempt, correlation id), and record a canonical Research `autodev-task` comment whose `executionId` is the `correlation_id` (workflow_dispatch does not return a run ID).
+   - `startResearch` (the Agent Task launcher) is retained but no longer called, per the reversibility rule.
+4. Keep the callback path unchanged: the orchestrator continues to accept a callback-identity `autodev-result:v1` comment and validate it with the existing transition validator.
+   - **Known limitation (documented risk):** the gh-aw worker commits through a later safe-outputs job, so it cannot report the post-commit head SHA in its callback. For the spike the callback echoes the pre-dispatch `head_sha`; the research→design transition does not require SHA equality for `AGENT_TASK`, so this passes. When Design lands, the orchestrator must re-resolve the actual branch head on callback rather than trusting the reported SHA.
 
 ### Phase 4: Tests
 
 1. Update and add focused `node:test` coverage under `.github/scripts/autodev/test/`:
    - `dispatchWorkflow` request shape, path encoding, and error handling in `github-client.test.mjs`.
-   - `advanceToResearch` dispatches the workflow with correctly derived inputs, records the `correlation_id` as `executionId`, and still enforces the stale-head and transition guards.
-   - `config.test.mjs` reflects the Research handler now mapping to `AGENTIC_WORKFLOW`.
-   - Add a guard asserting the compiled `autodev-research.lock.yml` exists and that the source declares the callback safe output.
+   - `advanceToResearch` dispatches the workflow with correctly derived inputs, records the `correlation_id` as `executionId`, blocks when no tracking pull request exists, and still enforces the stale-head and transition guards.
+   - A guard asserting the compiled `autodev-research.lock.yml` exists and that the source declares the push and callback safe outputs and the `autodev-result:v1` contract.
 2. Run the full suite: `node --test .github/scripts/autodev/test/*.test.mjs`.
 
 ### Phase 5: Live validation
@@ -133,6 +144,28 @@ Running the Copilot CLI headless as an orchestrator step is the most controllabl
 
 ## Follow-on (only if the spike succeeds)
 
-1. Migrate Design, SecurityReview, and Implementation to gh-aw using the same dispatch-and-callback shape and their existing per-state change policies and decision blocks.
+1. Migrate Design, SecurityReview, and Implementation to gh-aw using the same dispatch-and-callback shape and their existing per-state change policies and decision blocks. Implementation needs broad file-write access — see "Broad file-write access for Implementation" below.
 2. Remove the now-unused `agent-tasks-client.mjs`, its tests, the `AUTODEV_AGENT_TASKS_TOKEN` secret, and `autodev-research.agent.md`; update `README.md` and `initial-implementation.plan.md` to describe gh-aw as the single execution model.
 3. Reassess whether the async callback handshake is still needed per state or whether some states can run synchronously.
+
+## Broad file-write access for Implementation
+
+Research pins its push safe output to a single artifact, but Implementation must modify application code broadly. gh-aw supports this; the following was verified against gh-aw v0.82.14 docs, the compiled lock, and the gh-aw issue tracker.
+
+- **Broad write is supported.** `create-pull-request` and `push-to-pull-request-branch` treat `allowed-files` as an *exclusive allowlist*; omit it (or use `["**"]`) and the agent may modify any non-protected file. Use `excluded-files` to subtract paths. This is the designed coding-agent use case, not a limitation.
+- **Protected-files list (configurable).** Package manifests and lockfiles (`package.json`, `*.lock`, …), `README.md`, `DESIGN.md`, `CODEOWNERS`, security configs, and agent-instruction files are refused by default (`push-to-pull-request-branch` default `blocked`; `create-pull-request` default `request_review`). Implementation legitimately edits manifests when changing dependencies, so set `protected-files: allowed` (or the object form to permit specific files). This is a frontmatter switch.
+- **Top-level dot-folders (`.github/`) are hard-blocked and NOT overridable.** `protect_top_level_dot_folders` / `protected_path_prefixes` refuses any `.github/**` change; neither `allowed-files` nor `protected-files: allowed` bypasses it (verified empirically last session; gh-aw#20513 confirms there is no clean frontmatter switch — only a fragile lock-file edit that resets on recompile, which we will not do). The only sanctioned escape is `allow-workflows: true` plus a GitHub App identity, and only for `.github/workflows/`.
+- **Patch caps.** Raise `max-patch-files` (default `100`) and `max-patch-size` (default `4096` KB, max `10240`) for large changes. Both are real frontmatter fields (the lock already emits `max_patch_size`).
+
+### Mapping to AutoDev's Implementation change policy
+
+`getStateChangePolicy(IMPLEMENTATION)` allows `**` and denies `autodev/issues/**`, `.github/scripts/autodev/**`, `.github/agents/autodev-*.agent.md`, and `.github/workflows/autodev-*`. This maps cleanly onto gh-aw:
+
+- The `.github/**` denies are enforced *for free* by gh-aw's dot-folder protection — Implementation cannot rewrite AutoDev's own control plane, which is the intended behavior.
+- The `autodev/issues/**` deny (protecting approved artifacts) is a normal path, expressed as `excluded-files: ["autodev/issues/**"]`.
+- Suggested Implementation safe output: push to the existing tracking PR via `push-to-pull-request-branch` with `allowed-files: ["**"]`, `excluded-files: ["autodev/issues/**"]`, `protected-files: allowed`, and raised `max-patch-files`/`max-patch-size`.
+- **The orchestrator's `getStateChangePolicy` validation remains the authoritative post-hoc check** (changed files diffed against the preceding canonical `headSha`); gh-aw's allow/exclude is only the worker-side guardrail. This preserves the existing "validate files changed by an execution" convention.
+
+### Known limitation
+
+If an Implementation task ever needs to modify a *non-AutoDev* `.github/` file (for example the application's own CI unrelated to AutoDev), safe outputs cannot do it except `.github/workflows/` via a GitHub App. For most feature work this never arises and is arguably desirable. If it becomes necessary, the escape hatch is a custom `safe-outputs.jobs:` step that commits via the API, or the Copilot CLI fallback named earlier in this plan.

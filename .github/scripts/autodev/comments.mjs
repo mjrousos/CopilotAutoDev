@@ -136,8 +136,14 @@ export function extractVersionedMarker(body, markerName) {
     throw new ContractValidationError('invalid-comment-body', 'Comment body must be a string.');
   }
 
+  // Markers are emitted as fenced code blocks (```<marker>:vN) rather than HTML
+  // comments so they survive Agentic Workflow safe-output sanitization, which
+  // strips HTML/XML comments from agent-authored comment bodies. The fence must
+  // be immediately followed by the marker name (no whitespace) so this parser
+  // stays consistent with the orchestrator workflow's coarse `contains()`
+  // trigger filter, which matches the exact `\`\`\`<marker>:vN` substring.
   const markerPattern = new RegExp(
-    `<!--\\s*${escapeRegex(markerName)}:v(\\d+)\\s*([\\s\\S]*?)\\s*-->`,
+    `\`\`\`${escapeRegex(markerName)}:v(\\d+)[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n\`\`\``,
     'g',
   );
   const matches = [...body.matchAll(markerPattern)];
@@ -171,7 +177,7 @@ export function extractVersionedMarker(body, markerName) {
 }
 
 export function formatVersionedMarker(markerName, payload) {
-  return `<!-- ${markerName}:v${SCHEMA_VERSION}\n${JSON.stringify(payload, null, 2)}\n-->`;
+  return `\`\`\`${markerName}:v${SCHEMA_VERSION}\n${JSON.stringify(payload, null, 2)}\n\`\`\``;
 }
 
 export function validateResultRecord(value, expectedIssueNumber) {

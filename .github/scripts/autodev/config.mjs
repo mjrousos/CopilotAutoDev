@@ -82,6 +82,13 @@ export const CUSTOM_AGENTS = Object.freeze({
   [STATES.RESEARCH]: 'autodev-research',
 });
 
+// Compiled Agentic Workflow lock files the orchestrator dispatches per state.
+// The launch mechanism (workflow dispatch) is independent of the state's
+// transition semantics, which remain defined by STATE_HANDLERS.
+export const WORKFLOWS = Object.freeze({
+  [STATES.RESEARCH]: 'autodev-research.lock.yml',
+});
+
 const ARTIFACT_FILE_NAMES = Object.freeze({
   [STATES.RESEARCH]: 'research.md',
   [STATES.DESIGN]: 'design.md',
@@ -153,7 +160,9 @@ export function getIssueBranch(issueNumber) {
 }
 
 export function getIssueArtifactDirectory(issueNumber) {
-  return `.github/autodev/issues/${assertIssueNumber(issueNumber)}`;
+  // Artifacts live outside .github/ so Agentic Workflow push safe outputs can
+  // commit them: gh-aw refuses patches touching top-level dot-folders.
+  return `autodev/issues/${assertIssueNumber(issueNumber)}`;
 }
 
 // Placeholder file committed during Initialization so the issue branch differs
@@ -187,7 +196,7 @@ export function getStateChangePolicy(state, issueNumber) {
     return Object.freeze({
       allowed: Object.freeze(['**']),
       denied: Object.freeze([
-        '.github/autodev/issues/**',
+        'autodev/issues/**',
         '.github/scripts/autodev/**',
         '.github/agents/autodev-*.agent.md',
         '.github/workflows/autodev-*',
