@@ -52,6 +52,14 @@ test('markers are fenced code blocks, not HTML comments, so safe-output sanitiza
   assert.deepEqual(parseResultComment(marker, 42), createResult());
 });
 
+test('the marker parser requires the fence immediately before the name, matching the workflow filter', () => {
+  // The orchestrator's coarse trigger filter matches the exact
+  // '```autodev-result:v1' substring, so a space after the fence must NOT parse;
+  // otherwise a JS-valid callback would never trigger the workflow.
+  assert.equal(parseResultComment('``` autodev-result:v1\n{}\n```', 42), null);
+  assert.match(formatVersionedMarker(RESULT_MARKER, createResult()), /```autodev-result:v1/);
+});
+
 test('human results use the same marker with human outcomes', () => {
   const result = createResult({
     state: STATES.HUMAN_PLAN_REVIEW,

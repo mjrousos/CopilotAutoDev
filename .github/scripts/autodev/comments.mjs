@@ -138,9 +138,12 @@ export function extractVersionedMarker(body, markerName) {
 
   // Markers are emitted as fenced code blocks (```<marker>:vN) rather than HTML
   // comments so they survive Agentic Workflow safe-output sanitization, which
-  // strips HTML/XML comments from agent-authored comment bodies.
+  // strips HTML/XML comments from agent-authored comment bodies. The fence must
+  // be immediately followed by the marker name (no whitespace) so this parser
+  // stays consistent with the orchestrator workflow's coarse `contains()`
+  // trigger filter, which matches the exact `\`\`\`<marker>:vN` substring.
   const markerPattern = new RegExp(
-    `\`\`\`[ \\t]*${escapeRegex(markerName)}:v(\\d+)[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n\`\`\``,
+    `\`\`\`${escapeRegex(markerName)}:v(\\d+)[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n\`\`\``,
     'g',
   );
   const matches = [...body.matchAll(markerPattern)];

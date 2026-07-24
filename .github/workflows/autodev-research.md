@@ -48,7 +48,7 @@ safe-outputs:
     target: "${{ inputs.pull_request_number }}"
     if-no-changes: "error"
     allowed-files:
-      - "autodev/issues/**/research.md"
+      - "${{ inputs.artifact_path }}"
   add-comment:
     target: "${{ inputs.issue_number }}"
     max: 1
