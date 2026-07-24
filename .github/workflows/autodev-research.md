@@ -48,7 +48,13 @@ safe-outputs:
     target: "${{ inputs.pull_request_number }}"
     if-no-changes: "error"
     allowed-files:
-      - "${{ inputs.artifact_path }}"
+      # gh-aw evaluates allowed-files at the agent's safeoutputs tool boundary,
+      # where dispatch-input env vars are NOT populated, so it cannot be
+      # templated with ${{ inputs.artifact_path }} (that resolved to an empty
+      # GH_AW_INPUT_ARTIFACT_PATH and rejected every path). Use a static glob;
+      # the exact push target is still pinned to the dispatched pull request, and
+      # the orchestrator re-validates changed files against its change policy.
+      - "autodev/issues/*/research.md"
   add-comment:
     target: "${{ inputs.issue_number }}"
     max: 1
