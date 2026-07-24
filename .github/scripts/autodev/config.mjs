@@ -17,20 +17,25 @@ export const STATES = Object.freeze({
 
 export const STATE_VALUES = Object.freeze(Object.values(STATES));
 
+// AutoDev handles each state one of three ways: the orchestrator Action does the
+// work inline, an Agentic Workflow is dispatched to do the AI work, or a human
+// acts. Every AI state — producers like Research and the read-only CodeReview —
+// shares the AGENTIC_WORKFLOW handler. A workflow expresses what it may change
+// through the safe outputs it declares (e.g. CodeReview defines no push output),
+// not through its handler type.
 export const HANDLERS = Object.freeze({
   ORCHESTRATOR: 'orchestrator',
-  AGENT_TASK: 'agent-task',
   AGENTIC_WORKFLOW: 'agentic-workflow',
   HUMAN: 'human',
 });
 
 export const STATE_HANDLERS = Object.freeze({
   [STATES.INITIALIZATION]: HANDLERS.ORCHESTRATOR,
-  [STATES.RESEARCH]: HANDLERS.AGENT_TASK,
-  [STATES.DESIGN]: HANDLERS.AGENT_TASK,
-  [STATES.SECURITY_REVIEW]: HANDLERS.AGENT_TASK,
+  [STATES.RESEARCH]: HANDLERS.AGENTIC_WORKFLOW,
+  [STATES.DESIGN]: HANDLERS.AGENTIC_WORKFLOW,
+  [STATES.SECURITY_REVIEW]: HANDLERS.AGENTIC_WORKFLOW,
   [STATES.HUMAN_PLAN_REVIEW]: HANDLERS.HUMAN,
-  [STATES.IMPLEMENTATION]: HANDLERS.AGENT_TASK,
+  [STATES.IMPLEMENTATION]: HANDLERS.AGENTIC_WORKFLOW,
   [STATES.CODE_REVIEW]: HANDLERS.AGENTIC_WORKFLOW,
   [STATES.HUMAN_CODE_REVIEW]: HANDLERS.HUMAN,
   [STATES.BLOCKED]: HANDLERS.ORCHESTRATOR,
@@ -59,7 +64,9 @@ const AUTOMATED_STATE_VALUES = Object.freeze([
   STATES.CODE_REVIEW,
 ]);
 
-const EXTERNAL_EXECUTION_STATE_VALUES = Object.freeze([
+// States whose work is executed by a dispatched Agentic Workflow rather than
+// inline in the orchestrator.
+const AGENTIC_WORKFLOW_STATE_VALUES = Object.freeze([
   STATES.RESEARCH,
   STATES.DESIGN,
   STATES.SECURITY_REVIEW,
@@ -77,10 +84,6 @@ export const LABELS = Object.freeze({
 });
 
 export const DEFAULT_ORCHESTRATOR_LOGIN = 'github-actions[bot]';
-
-export const CUSTOM_AGENTS = Object.freeze({
-  [STATES.RESEARCH]: 'autodev-research',
-});
 
 // Compiled Agentic Workflow lock files the orchestrator dispatches per state.
 // The launch mechanism (workflow dispatch) is independent of the state's
@@ -131,13 +134,9 @@ export function isStateTransitionAllowed(fromState, nextState, { blockedFromStat
   return ALLOWED_TRANSITIONS[fromState].includes(nextState);
 }
 
-export function isExternalExecutionState(state) {
-  return EXTERNAL_EXECUTION_STATE_VALUES.includes(state);
-}
-
 const AUTOMATED_SUCCESS_STATE_VALUES = Object.freeze([
   STATES.INITIALIZATION,
-  ...EXTERNAL_EXECUTION_STATE_VALUES,
+  ...AGENTIC_WORKFLOW_STATE_VALUES,
 ]);
 
 // States that may report an automated `outcome: success` result. Initialization

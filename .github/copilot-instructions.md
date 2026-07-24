@@ -41,10 +41,9 @@ The core modules have distinct responsibilities:
 - `transitions.mjs` is the central transition-request validator.
 - `validation.mjs` owns trusted-author and repository-path/change-policy checks.
 - `github-client.mjs` wraps only the GitHub REST operations currently needed by implemented milestones.
-- `agent-tasks-client.mjs` isolates the public-preview Agent Tasks API and its user-scoped token.
 - `handlers/research.mjs` launches Research. Design callback processing is deferred until the Design milestone.
 
-Research, Design, SecurityReview, and Implementation are planned as asynchronous Copilot Agent Tasks. CodeReview is planned as a GitHub Agentic Workflow with read-only agent permissions and safe outputs. See `.github/plans/initial-requirements.md` and `.github/plans/initial-implementation.plan.md` before changing behavior or scope.
+Every AI-assisted state (Research, Design, SecurityReview, Implementation, and CodeReview) runs as a GitHub Agentic Workflow (gh-aw) dispatched by the orchestrator via `workflow_dispatch`. Producer states (Research/Design/SecurityReview/Implementation) push artifacts and changes to the issue branch's tracking pull request through the `push-to-pull-request-branch` safe output; CodeReview is read-only. Each workflow reports its result with an `autodev-result:v1` callback posted by the `add-comment` safe output under the callback identity. See `.github/plans/initial-requirements.md` and `.github/plans/initial-implementation.plan.md` before changing behavior or scope.
 
 ## Conventions
 
@@ -58,7 +57,7 @@ Research, Design, SecurityReview, and Implementation are planned as asynchronous
 - Use `ContractValidationError` with stable error codes for invalid external input. Catch only expected validation errors; allow unexpected failures to surface.
 - Preserve immutable contracts and return values with `Object.freeze`, matching the existing modules.
 - The only labels are `autodev`, `autodev/ready-for-plan-review`, `autodev/ready-for-code-review`, and `autodev/blocked`. State transitions remain authoritative in issue comments.
-- Orchestrator comments use the workflow `GITHUB_TOKEN` so they do not retrigger Actions. External callbacks use a separate callback identity. Never expose `AUTODEV_AGENT_TASKS_TOKEN` to agents, prompts, MCP servers, comments, or logs.
+- Orchestrator comments use the workflow `GITHUB_TOKEN` so they do not retrigger Actions. Agentic Workflow callbacks use the separate `AUTODEV_CALLBACK_TOKEN` identity (via the `add-comment` safe output) so their comments do retrigger the orchestrator. Never expose `AUTODEV_CALLBACK_TOKEN` to an agent, its prompt, or the MCP server; only the safe-output job may reference it.
 - Keep workflow permissions at least privilege. Add `pull-requests: write` only with PR operations and `actions: write` only when workflow dispatch is implemented.
 - Workflow-level conditions are an optimization only. Repeat authorization, marker parsing, and transition validation in JavaScript before mutations.
 - For gh-aw work, use the repository `agentic-workflows` skill/agent. Edit the `.md` source workflow, compile it, and commit the generated `.lock.yml`; never hand-edit a lock workflow. `.github/workflows/*.lock.yml` is generated content.
