@@ -2,7 +2,16 @@
 
 ## Status
 
-In progress. Phases 1–4 (author, compile, wire, test) are implemented on branch `spike/gh-aw-research`. Phase 5 (live validation) is pending: it requires merging the workflow and wiring to the default branch and labeling a fresh test issue, then observing the runs. This plan covers a single reversible spike: re-implement the **Research** state as a GitHub Agentic Workflow (gh-aw) instead of a Copilot Agent Task. It does not change any other state. If the spike succeeds, a follow-on plan will migrate Design, SecurityReview, and Implementation and retire the Agent Tasks client.
+In progress. Phases 1–4 (author, compile, wire, test) are implemented on branch `spike/gh-aw-research`, plus the post-review adaptations below. Phase 5 (live validation) is pending: it requires merging the workflow and wiring to the default branch and labeling a fresh test issue, then observing the runs. This plan covers a single reversible spike: re-implement the **Research** state as a GitHub Agentic Workflow (gh-aw) instead of a Copilot Agent Task. It does not change any other state. If the spike succeeds, a follow-on plan will migrate Design, SecurityReview, and Implementation and retire the Agent Tasks client.
+
+## Code review findings and adaptations
+
+A code review of the initial spike surfaced structural conflicts between gh-aw's safe-outputs model and AutoDev's original design. All are verified against gh-aw v0.82.14 docs and the compiled lock, and the following adaptations were made:
+
+1. **gh-aw sanitizes safe-output bodies and strips HTML/XML comments** (`removeXmlComments`; gh-aw#18992). AutoDev's `<!-- autodev-result:v1 -->` marker would be silently removed, so the callback would never retrigger the orchestrator. **Adaptation:** all versioned markers (`autodev-task`, `autodev-result`, `autodev-decision`) are now emitted as fenced code blocks (```` ```<marker>:vN ````), which survive sanitization. `comments.mjs` (`extractVersionedMarker`/`formatVersionedMarker`), the dispatcher's canonical-comment guard, and the orchestrator's `issue_comment` trigger filter were updated accordingly.
+2. **gh-aw `push-to-pull-request-branch` refuses patches touching top-level dot-folders** (`protect_top_level_dot_folders`), and neither `allowed-files` nor `protected-files: allowed` overrides it (verified empirically). AutoDev artifacts under `.github/autodev/issues/` could never be committed. **Adaptation:** artifacts moved to `autodev/issues/<n>/` (outside `.github/`); `config.mjs` paths and the Implementation change policy's deny-list were updated.
+3. **The generated concurrency group collapsed all `workflow_dispatch` runs** (group keyed on `github.ref` = `refs/heads/main`, `cancel-in-progress: true`), so a second issue's Research would cancel the first. **Adaptation:** the workflow declares an issue-specific concurrency group `autodev-research-issue-${{ inputs.issue_number }}`.
+4. **The agent job checks out the default branch, not the tracking PR branch** (the PR checkout step only runs for PR-context events). The push safe-outputs job checks out the PR branch itself and applies the agent's patch, so a new-file artifact still lands append-only; the residual effect is that the agent researches from `main`. Tracked for live validation.
 
 ## Problem and approach
 
@@ -62,7 +71,7 @@ Running the Copilot CLI headless as an orchestrator step is the most controllabl
    - `issue_number`
    - `head_ref` (the issue branch, `autodev/issue-<n>`)
    - `head_sha` (the canonical Initialization/most-recent head SHA)
-   - `artifact_path` (`.github/autodev/issues/<n>/research.md`)
+   - `artifact_path` (`autodev/issues/<n>/research.md`)
    - `attempt`
    - `correlation_id` (caller-generated; becomes the canonical `executionId`)
 2. Configure the agent job for least privilege:

@@ -21,10 +21,10 @@ The AutoDev workflow will move through the following states. Each state will be 
 
 ## Important Implementation Details
 
-- Canonical workflow state will be tracked as an append-only sequence of orchestrator-authored GitHub issue comments. Each canonical comment will contain a visible summary and a versioned HTML comment describing the current task or human state:
+- Canonical workflow state will be tracked as an append-only sequence of orchestrator-authored GitHub issue comments. Each canonical comment will contain a visible summary and a versioned fenced-code-block marker describing the current task or human state:
 
-  ```text
-  <!-- autodev-task:v1
+  ````text
+  ```autodev-task:v1
   {
     "schemaVersion": 1,
     "issue": 42,
@@ -36,8 +36,8 @@ The AutoDev workflow will move through the following states. Each state will be 
     "headSha": "abc123",
     "createdAt": "2026-07-22T17:00:00Z"
   }
-  -->
   ```
+  ````
 
   - The `state` in the valid record with the highest contiguous sequence number is the effective current state of the AutoDev workflow.
   - `executionId` is the platform task ID or workflow correlation ID recorded by the orchestrator when it launches work. It is null for human-review, Blocked, Completed, or dry-run states.
@@ -47,8 +47,8 @@ The AutoDev workflow will move through the following states. Each state will be 
   - GitHub labels may mirror the current state for visibility and discovery, but they will not be treated as authoritative state because they can be modified independently.
 - Automated executions and human reviewers will request transitions using the same structured result comment:
 
-  ```text
-  <!-- autodev-result:v1
+  ````text
+  ```autodev-result:v1
   {
     "schemaVersion": 1,
     "issue": 42,
@@ -59,10 +59,10 @@ The AutoDev workflow will move through the following states. Each state will be 
     "decisionRationale": "Research is complete and the requirements are actionable.",
     "headRef": "autodev/issue-42",
     "headSha": "abc123",
-    "artifacts": [".github/autodev/issues/42/research.md"]
+    "artifacts": ["autodev/issues/42/research.md"]
   }
-  -->
   ```
+  ````
 
   - Agent Task agents, the CodeReview Agentic Workflow, trusted human reviewers, and future local Copilot review tools may write result comments, but only the orchestrator may convert a result into canonical state.
   - The orchestrator will validate the callback identity, current state, attempt, requested transition, branch, commit, artifacts, and files changed since the current task's `headSha`. For automated states it queries the platform task identified by the current task record's `executionId`.

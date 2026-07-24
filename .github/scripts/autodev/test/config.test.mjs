@@ -33,7 +33,7 @@ test('branch and artifact paths are issue-specific', () => {
   assert.equal(getIssueBranch(42), 'autodev/issue-42');
   assert.equal(
     getArtifactPath(STATES.SECURITY_REVIEW, 42),
-    '.github/autodev/issues/42/security-review.md',
+    'autodev/issues/42/security-review.md',
   );
   assert.throws(() => getIssueBranch(0), /positive safe integer/);
 });
@@ -43,7 +43,7 @@ test('documentation states can modify only their own artifact', () => {
     isPathAllowedForState(
       STATES.RESEARCH,
       42,
-      '.github/autodev/issues/42/research.md',
+      'autodev/issues/42/research.md',
     ),
     true,
   );
@@ -51,7 +51,7 @@ test('documentation states can modify only their own artifact', () => {
     isPathAllowedForState(
       STATES.RESEARCH,
       42,
-      '.github/autodev/issues/42/design.md',
+      'autodev/issues/42/design.md',
     ),
     false,
   );
@@ -65,7 +65,7 @@ test('implementation policy protects AutoDev control files and approved artifact
     isPathAllowedForState(
       STATES.IMPLEMENTATION,
       42,
-      '.github/autodev/issues/42/design.md',
+      'autodev/issues/42/design.md',
     ),
     false,
   );
@@ -73,7 +73,7 @@ test('implementation policy protects AutoDev control files and approved artifact
     isPathAllowedForState(
       STATES.IMPLEMENTATION,
       42,
-      '.github/autodev/issues/99/research.md',
+      'autodev/issues/99/research.md',
     ),
     false,
   );

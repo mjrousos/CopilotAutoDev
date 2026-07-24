@@ -58,7 +58,7 @@ export function determineState({
   if (comment.user?.login === orchestratorLogin) {
     return Object.freeze({ state: INVALID_STATE, reason: 'orchestrator-comment' });
   }
-  if (comment.body.includes(`<!-- ${TASK_MARKER}:`)) {
+  if (comment.body.includes(`\`\`\`${TASK_MARKER}:`)) {
     return Object.freeze({ state: INVALID_STATE, reason: 'canonical-task-comment' });
   }
 

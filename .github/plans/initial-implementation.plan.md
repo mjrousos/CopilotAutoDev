@@ -119,16 +119,16 @@ The exact module split may be collapsed if implementation reveals that a module 
      - Any automated state -> Blocked when bounded recovery is exhausted or human intervention is required
      - Blocked -> the most recent task state preceding Blocked, after a trusted human retry decision
    - Branch naming convention `autodev/issue-<number>`.
-   - Artifact paths under `.github/autodev/issues/<number>/`.
+   - Artifact paths under `autodev/issues/<number>/` (outside `.github/` so Agentic Workflow push safe outputs can commit them).
    - Allowed changed-file patterns per Agent Task state.
-2. [x] Implement current-task parsing and serialization for `<!-- autodev-task:v1 ... -->` comments:
+2. [x] Implement current-task parsing and serialization for `autodev-task:v1` fenced-marker comments:
    - Validate schema version, issue number, sequence, current state, execution ID, attempt, ref, SHA, and timestamp.
    - Select the highest valid orchestrator-authored sequence.
    - Reject malformed, duplicate-sequence, sequence-gap, wrong-issue, unknown-version, and non-orchestrator task comments.
 3. [x] Define and implement the unified transition-result marker:
 
-   ```text
-   <!-- autodev-result:v1
+   ````text
+   ```autodev-result:v1
    {
      "schemaVersion": 1,
      "issue": 42,
@@ -139,10 +139,10 @@ The exact module split may be collapsed if implementation reveals that a module 
      "decisionRationale": "Research is complete and the requirements are actionable.",
      "headRef": "autodev/issue-42",
      "headSha": "...",
-     "artifacts": [".github/autodev/issues/42/research.md"]
+     "artifacts": ["autodev/issues/42/research.md"]
    }
-   -->
    ```
+   ````
 
    - Automated executions use `outcome: "success"` for a normal transition and report their artifacts.
    - Human-authored results use the same marker with `outcome: "approved"`, `"changes-requested"`, or `"retry"` and may use an empty `artifacts` array.

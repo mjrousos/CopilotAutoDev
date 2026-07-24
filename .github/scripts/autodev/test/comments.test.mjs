@@ -27,7 +27,7 @@ function createResult(overrides = {}) {
     decisionRationale: 'Research is complete.',
     headRef: 'autodev/issue-42',
     headSha: SHA,
-    artifacts: ['.github/autodev/issues/42/research.md'],
+    artifacts: ['autodev/issues/42/research.md'],
     ...overrides,
   };
 }
@@ -40,6 +40,16 @@ test('automated result comments round-trip', () => {
   const result = createResult();
   const comment = formatResult(result);
   assert.deepEqual(parseResultComment(comment, 42), result);
+});
+
+test('markers are fenced code blocks, not HTML comments, so safe-output sanitization keeps them', () => {
+  // gh-aw strips HTML/XML comments from agent-authored comment bodies; the
+  // marker must be a fenced code block to survive and retrigger the orchestrator.
+  const marker = formatVersionedMarker(RESULT_MARKER, createResult());
+  assert.match(marker, /^```autodev-result:v1\n/);
+  assert.match(marker, /\n```$/);
+  assert.doesNotMatch(marker, /<!--/);
+  assert.deepEqual(parseResultComment(marker, 42), createResult());
 });
 
 test('human results use the same marker with human outcomes', () => {
@@ -120,12 +130,12 @@ test('result validation rejects malformed contracts', () => {
 
 test('result parser rejects unknown marker versions and invalid JSON', () => {
   assert.throws(
-    () => parseResultComment('<!-- autodev-result:v2\n{}\n-->', 42),
+    () => parseResultComment('```autodev-result:v2\n{}\n```', 42),
     (error) => error instanceof ContractValidationError
       && error.code === 'unsupported-marker-version',
   );
   assert.throws(
-    () => parseResultComment('<!-- autodev-result:v1\n{broken}\n-->', 42),
+    () => parseResultComment('```autodev-result:v1\n{broken}\n```', 42),
     (error) => error instanceof ContractValidationError && error.code === 'invalid-json',
   );
 });

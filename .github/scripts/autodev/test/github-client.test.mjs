@@ -148,20 +148,20 @@ test('createOrUpdateFile seeds a new file without a blob SHA', async () => {
       return jsonResponse({ message: 'Not Found' }, { status: 404 });
     }
     return jsonResponse(
-      { content: { path: '.github/autodev/issues/42/README.md' }, commit: { sha: SHA } },
+      { content: { path: 'autodev/issues/42/README.md' }, commit: { sha: SHA } },
       { status: 201 },
     );
   });
 
   const result = await client.createOrUpdateFile({
-    path: '.github/autodev/issues/42/README.md',
+    path: 'autodev/issues/42/README.md',
     message: 'seed',
     content: '# hello',
     branch: 'autodev/issue-42',
   });
 
   assert.equal(result.commit.sha, SHA);
-  assert.match(requests[0].url, /contents\/\.github\/autodev\/issues\/42\/README\.md/);
+  assert.match(requests[0].url, /contents\/autodev\/issues\/42\/README\.md/);
   assert.equal(requests[1].options.method, 'PUT');
   const putBody = JSON.parse(requests[1].options.body);
   assert.equal(putBody.branch, 'autodev/issue-42');

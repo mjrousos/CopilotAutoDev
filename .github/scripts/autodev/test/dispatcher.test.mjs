@@ -168,7 +168,7 @@ test('invalid result comments receive a visible error without a transition', asy
     eventPayload: {
       issue: { number: 42 },
       comment: {
-        body: '<!-- autodev-result:v1\n{broken}\n-->',
+        body: '```autodev-result:v1\n{broken}\n```',
         user: { login: 'callback-bot' },
         author_association: 'NONE',
       },

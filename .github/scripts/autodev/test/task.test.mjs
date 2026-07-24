@@ -120,7 +120,7 @@ test('duplicate sequences are excluded and reported', () => {
 
 test('malformed and wrong-issue task comments are ignored with errors', () => {
   const comments = [
-    { id: 1, body: '<!-- autodev-task:v1\n{broken}\n-->', user: { login: 'github-actions[bot]' } },
+    { id: 1, body: '```autodev-task:v1\n{broken}\n```', user: { login: 'github-actions[bot]' } },
     createComment(2, createTask({ issue: 99 })),
   ];
 
