@@ -158,7 +158,7 @@ test('blocked retry uses the preceding task state', () => {
   );
 });
 
-test('Agentic Workflow review cannot report a different head SHA', () => {
+test('CodeReview is validated as a standard Agentic Workflow state', () => {
   const current = createCurrentTask({
     state: STATES.CODE_REVIEW,
     executionId: 'review-correlation',
@@ -169,9 +169,20 @@ test('Agentic Workflow review cannot report a different head SHA', () => {
     artifacts: [],
   });
 
-  assert.throws(
-    () => validateTransitionRequest(current, result),
-    (error) => error instanceof ContractValidationError && error.code === 'sha-mismatch',
-  );
+  // A single AGENTIC_WORKFLOW handler type covers every automated state, so the
+  // transition validator no longer enforces head-SHA immutability for reviews.
+  // CodeReview expresses its read-only nature through its workflow safe outputs
+  // (it declares no push output), not through a distinct handler type. A result
+  // is accepted whether or not it changes the head SHA.
+  assert.doesNotThrow(() => validateTransitionRequest(current, result));
   assert.doesNotThrow(() => validateTransitionRequest(current, { ...result, headSha: SHA }));
+
+  // It is still an automated state, so a non-success (human) outcome is
+  // rejected. Result-record validation rejects a human outcome on a non-human
+  // state before the transition rules run, so the specific code is
+  // `invalid-human-state`.
+  assert.throws(
+    () => validateTransitionRequest(current, { ...result, outcome: RESULT_OUTCOMES.APPROVED }),
+    (error) => error instanceof ContractValidationError && error.code === 'invalid-human-state',
+  );
 });

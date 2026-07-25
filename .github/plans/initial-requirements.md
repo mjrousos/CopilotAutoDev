@@ -1,12 +1,12 @@
 # Copilot AutoDev AI-Driven SDLC Automation
 
-In this repo, I want to create a [GitHub actions](https://docs.github.com/en/actions) and [custom agent](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-custom-agents)-based solution that will enable developers to automate the software development lifecycle (SDLC) using GitHub Copilot.
+In this repo, I want to create a [GitHub Actions](https://docs.github.com/en/actions) and [GitHub Agentic Workflows](https://githubnext.github.io/gh-aw/)-based solution that will enable developers to automate the software development lifecycle (SDLC) using GitHub Copilot.
 
 ## Expected User Experience
 
 Users will begin by creating a GitHub issue in this repository and applying a label that indicates the AutoDev workflow should handle the issue. This will trigger a GitHub action that will begin the AutoDev workflow. The workflow will be a series of actions executions that move through a state machine to automate the SDLC. State will be tracked in GitHub issue comments.
 
-The AutoDev workflow will move through the following states. Each state will be handled by the orchestrator, a Copilot Agent Task, a GitHub Agentic Workflow, or a human reviewer as described below.
+The AutoDev workflow will move through the following states. Each state will be handled by the orchestrator, a GitHub Agentic Workflow, or a human reviewer as described below.
 
 - Initialization: In this state, the AutoDev workflow's GitHub action will create and push a working branch to the repository. The branch will be named after the issue number. The workflow will then indicate that the Research state is next.
 - Research: In this state, the AutoDev workflow's Research agent will analyze the issue description and any relevant code in the repository to determine what needs to be done. The agent will then search the internet to research relevant technologies, libraries, frameworks, best practices, and other information that will help it determine how to implement the solution. The agent will then create an issue-specific file in the working branch (or update a file if a research document already exists for this issue) with a detailed research summary and will add an issue comment summarizing its work, identifying the research file that was created, and indicating that the Design state is next.
@@ -64,32 +64,32 @@ The AutoDev workflow will move through the following states. Each state will be 
   ```
   ````
 
-  - Agent Task agents, the CodeReview Agentic Workflow, trusted human reviewers, and future local Copilot review tools may write result comments, but only the orchestrator may convert a result into canonical state.
-  - The orchestrator will validate the callback identity, current state, attempt, requested transition, branch, commit, artifacts, and files changed since the current task's `headSha`. For automated states it queries the platform task identified by the current task record's `executionId`.
+  - Agentic Workflows, trusted human reviewers, and future local Copilot review tools may write result comments, but only the orchestrator may convert a result into canonical state.
+  - The orchestrator will validate the callback identity, current state, attempt, requested transition, branch, commit, artifacts, and files changed since the current task's `headSha`. For automated states it correlates the current task record's `executionId` (the dispatch correlation id) with the workflow run and the committed branch artifacts.
   - Design and SecurityReview will also persist their selected `nextState` and rationale in their committed artifacts so a missed callback can be recovered without guessing.
   - For automated executions, `outcome` is `success` when requesting a normal transition.
   - For human-authored results, `artifacts` may be empty and `outcome` is `approved`, `changes-requested`, or `retry`. The current `state`, requested `nextState`, `headRef`, `headSha`, and rationale remain required.
   - Human-authored results will be accepted only when the comment author's `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR` and the referenced `headSha` is still current.
   - The orchestrator workflow will process only newly created issue comments. Edited or deleted comments will not create, modify, or reverse transitions in the proof of concept.
-- There will be a primary GitHub Actions workflow backed by an orchestrator script that will be responsible for managing the state machine and invoking the configured handler for each state. Most automated states will be implemented as custom *.agent.md files under .github/agents and invoked using the [GitHub Task REST API](https://docs.github.com/en/rest/agent-tasks/agent-tasks?apiVersion=2026-03-10#start-a-task). To demonstrate both approaches in the proof of concept, CodeReview will instead be implemented as a GitHub Agentic Workflow. The state handlers will be:
+- There will be a primary GitHub Actions workflow backed by an orchestrator script that will be responsible for managing the state machine and invoking the configured handler for each state. Every AI-assisted state will be implemented as a [GitHub Agentic Workflow](https://githubnext.github.io/gh-aw/) (gh-aw) authored as a `.md` source, compiled to a self-contained `.lock.yml`, and dispatched by the orchestrator via `workflow_dispatch`. Deterministic states run inline in the orchestrator; human states wait for trusted human markers. The state handlers will be:
 
   | State | Handler |
   | --- | --- |
   | Initialization | Deterministic orchestrator logic |
-  | Research | Copilot Agent Task using a custom agent |
-  | Design | Copilot Agent Task using a custom agent |
-  | SecurityReview | Copilot Agent Task using a custom agent |
+  | Research | GitHub Agentic Workflow |
+  | Design | GitHub Agentic Workflow |
+  | SecurityReview | GitHub Agentic Workflow |
   | HumanPlanReview | Human reviewer |
-  | Implementation | Copilot Agent Task using a custom agent |
+  | Implementation | GitHub Agentic Workflow |
   | CodeReview | GitHub Agentic Workflow |
   | HumanCodeReview | Human reviewer |
   | Blocked | Orchestrator and human reviewer |
   | Completed | Deterministic orchestrator logic |
 
-  - The orchestrator will dispatch the CodeReview Agentic Workflow with the issue number, pull request number, expected head commit, and a unique correlation ID. The Agentic Workflow will use safe outputs for pull request review comments, labels, and its structured completion callback. The callback must use an authentication mechanism that causes the orchestrator's `issue_comment` workflow to run; a comment created with the default `GITHUB_TOKEN` will not trigger that workflow.
-- Agent credentials and capabilities will remain separated. The credential used by the orchestrator to create and inspect Agent Tasks will not be provided to the agents. Copilot cloud agent provides each task with a platform-managed capability to commit and push changes only to its designated working branch; this does not give the agent a reusable, general-purpose GitHub API token. The orchestrator will validate the files changed by each task and reject results that modify files outside the paths permitted for that state.
-- Issue comments used to report Agent Task results will be treated as a separate capability from branch writes. The intended long-term design is to provide agents with a dedicated, narrowly scoped issue-write tool that accepts a structured task result and can only post a completion comment to the issue associated with the current task. For the initial proof of concept, Agent Task agents will instead use a write-enabled GitHub MCP tool with only the `add_issue_comment` operation enabled. The credential used by this MCP tool must be scoped to this repository and must not be the credential used by the orchestrator to invoke the Agent Tasks API. This is a temporary simplification and should not be expanded into general GitHub write access for the agents.
-- The orchestrator will use its workflow `GITHUB_TOKEN` for canonical state, error, and instruction comments. These comments intentionally do not trigger another workflow run. Agent Task and Agentic Workflow callback comments will use a separate callback identity so that their `issue_comment` events trigger the orchestrator.
+  - The orchestrator will dispatch each Agentic Workflow with the issue number (and, for CodeReview, the pull request number), expected head commit, and a unique correlation ID. Each workflow will use safe outputs for its changes (a producer's `push-to-pull-request-branch`, or CodeReview's review comments and labels) and its structured completion callback. The callback must use an authentication mechanism that causes the orchestrator's `issue_comment` workflow to run; a comment created with the default `GITHUB_TOKEN` will not trigger that workflow.
+- Agent credentials and capabilities will remain minimal. Each Agentic Workflow reads the repository through the built-in GitHub MCP server in `gh-proxy` mode using the workflow's own least-privilege `GITHUB_TOKEN`; it never receives a general-purpose write token. Producer workflows commit only through the `push-to-pull-request-branch` safe output, which runs as a separate job and pushes only to the issue's tracking pull request. The orchestrator will validate the files changed by each execution and reject results that modify files outside the paths permitted for that state.
+- Issue comments used to report workflow results will be posted by the gh-aw `add-comment` safe output, which runs as a separate job after the agent finishes. That job — not the agent — holds the callback credential (`AUTODEV_CALLBACK_TOKEN`), a repository-scoped PAT with `Issues: read/write`; the safe-output allowlist (a single comment) is the narrow boundary. This credential is never exposed to the agent and must not be expanded into general GitHub write access.
+- The orchestrator will use its workflow `GITHUB_TOKEN` for canonical state, error, and instruction comments. These comments intentionally do not trigger another workflow run. Agentic Workflow callback comments will use a separate callback identity so that their `issue_comment` events trigger the orchestrator.
 - The proof of concept will use only these labels:
   - `autodev`: starts AutoDev when applied to an issue and remains available for discovery by the reconciler.
   - `autodev/ready-for-plan-review`: indicates that a human plan decision is required.

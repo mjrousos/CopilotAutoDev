@@ -85,7 +85,6 @@ export function determineState({
 
 export async function dispatchAutoDevEvent({
   github,
-  agentTasks,
   callbackGithub,
   eventName,
   eventPayload,

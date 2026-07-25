@@ -2,7 +2,7 @@
 
 ## Problem and approach
 
-Implement the proof-of-concept described in `.github/plans/initial-requirements.md` as an issue-driven SDLC state machine. A deterministic JavaScript orchestrator will own canonical state, transition validation, branch management, Agent Task dispatch, pull request creation, and recovery. Research, Design, SecurityReview, and Implementation will run as asynchronous Copilot Agent Tasks using repository custom agents. CodeReview will run as a GitHub Agentic Workflow to demonstrate gh-aw safe outputs. Human plan and code-review decisions will be accepted through structured HTML markers from trusted repository collaborators.
+Implement the proof-of-concept described in `.github/plans/initial-requirements.md` as an issue-driven SDLC state machine. A deterministic JavaScript orchestrator will own canonical state, transition validation, branch management, Agentic Workflow dispatch, pull request creation, and recovery. Every AI-assisted state — Research, Design, SecurityReview, Implementation, and CodeReview — runs as a GitHub Agentic Workflow (gh-aw) dispatched by the orchestrator, so the POC has a single AI execution model built on gh-aw safe outputs. Human plan and code-review decisions will be accepted through structured `autodev-result:v1` markers from trusted repository collaborators.
 
 The implementation will be delivered in independently usable milestones. Each milestone must leave the repository in a testable state and include its own focused validation before later states are added.
 
@@ -10,28 +10,23 @@ The implementation will be delivered in independently usable milestones. Each mi
 
 - Use plain JavaScript and Node's built-in `node:test` runner; avoid a build or bundling step.
 - Include scheduled stale-execution reconciliation as the final functional POC milestone, after the happy path works.
-- Use structured HTML comments for all decisions.
+- Use structured `autodev-result:v1` fenced code-block markers for all decisions. gh-aw strips HTML comments from safe-output bodies, so the marker is a fenced code block whose info string is the marker name.
 - Use the same `autodev-result:v1` schema for automated and human transition requests; authorization and field requirements vary by author rather than by marker type.
 - Trust human decisions only from comments whose `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`.
 - The orchestrator, not the Implementation agent, creates or reuses the implementation pull request.
 - Store only the current `state` and its orchestrator-recorded `executionId` in each `autodev-task:v1` record; append-only comments provide history.
 - CodeReview is an advisory Agentic Workflow. It may post findings and request implementation changes, but a human performs the final code-review decision.
 - POC research, design, and security artifacts remain on the issue branch and are included in the implementation pull request.
-- Use GitHub.com and the Agent Tasks API version documented in the requirements. Isolate preview API behavior behind a small client module.
-- Use `GITHUB_TOKEN` for orchestrator-authored state, error, and instruction comments so those comments do not recursively trigger the orchestrator. Only external execution callbacks use the non-`GITHUB_TOKEN` callback identity.
+- Run every AI-assisted state as a gh-aw Agentic Workflow dispatched by the orchestrator with `workflow_dispatch`. Author each workflow as an `.md` source, compile it to a self-contained `.lock.yml`, and commit both. The launch mechanism (workflow dispatch) is decoupled from a state's transition semantics.
+- Use `GITHUB_TOKEN` for orchestrator-authored state, error, and instruction comments so those comments do not recursively trigger the orchestrator. Only Agentic Workflow callbacks use the non-`GITHUB_TOKEN` callback identity.
 - Model `Initialization` as canonical sequence-1 state. Because Initialization runs synchronously in the orchestrator (no external worker posts its result), the Initialization handler itself posts the `Initialization -> Research` `autodev-result:v1` handoff using the callback identity, so a follow-up orchestrator run validates the transition and launches Research. It is the only orchestrator state that emits an automated-success result.
-- Agent Tasks must commit to the pre-created issue branch, so Initialization opens a tracking pull request for `autodev/issue-<number>` and Research is launched with both `head_ref` and `base_ref`. The preview API only commits to an existing branch when `head_ref` and `base_ref` are supplied and an open pull request exists for that head/base; `create_pull_request: false` alone does not stop the agent from creating its own branch and pull request.
+- Agentic Workflows commit through the `push-to-pull-request-branch` safe output, which requires an open pull request for the issue branch. Initialization therefore opens a tracking pull request for `autodev/issue-<number>`, and the orchestrator dispatches each producer workflow with the issue number, branch, recorded head SHA, and tracking pull request number. Because the safe output validates the whole base..head diff (which always includes the initialization scaffold and any prior artifacts), producer workflows do not use a per-file `allowed-files` allowlist; they set `protected-files: allowed` and rely on the orchestrator's change policy — validated against the preceding canonical `headSha` — as the authoritative changed-file guard.
 - Represent retry exhaustion or executions requiring intervention as canonical `Blocked` state, not only as a label.
 
 ## Planned repository structure
 
 ```text
 .github/
-  agents/
-    autodev-research.agent.md
-    autodev-design.agent.md
-    autodev-security-review.agent.md
-    autodev-implementation.agent.md
   autodev/
     issue-artifact-template.md
   plans/
@@ -44,7 +39,6 @@ The implementation will be delivered in independently usable milestones. Each mi
       transitions.mjs
       comments.mjs
       github-client.mjs
-      agent-tasks-client.mjs
       dispatcher.mjs
       handlers/
         initialization.mjs
@@ -54,7 +48,6 @@ The implementation will be delivered in independently usable milestones. Each mi
       reconcile.mjs
       test/
         config.test.mjs
-        agent-tasks-client.test.mjs
         github-client.test.mjs
         main.test.mjs
         task.test.mjs
@@ -67,13 +60,21 @@ The implementation will be delivered in independently usable milestones. Each mi
         reconcile.test.mjs
   workflows/
     autodev-orchestrator.yml
+    autodev-research.md
+    autodev-research.lock.yml
+    autodev-design.md
+    autodev-design.lock.yml
+    autodev-security-review.md
+    autodev-security-review.lock.yml
+    autodev-implementation.md
+    autodev-implementation.lock.yml
     autodev-code-review.md
     autodev-code-review.lock.yml
     autodev-reconcile.yml
 README.md
 ```
 
-The exact module split may be collapsed if implementation reveals that a module has no independent responsibility. Keep the event entry point thin and place parsing, validation, and transition logic in pure testable functions.
+Each AI-assisted state's behavior lives entirely in its Agentic Workflow `.md` source (prompt, tools, and safe outputs); the orchestrator only dispatches the compiled `.lock.yml` and validates the callback. The exact module split may be collapsed if implementation reveals that a module has no independent responsibility. Keep the event entry point thin and place parsing, validation, and transition logic in pure testable functions.
 
 ## Milestone 0: Publish the approved plan and document prerequisites - Complete
 
@@ -82,14 +83,12 @@ The exact module split may be collapsed if implementation reveals that a module 
 1. [x] Copy this approved session plan to `.github/plans/initial-implementation.plan.md`.
 2. [x] Update the requirements where implementation needs an explicit contract:
    - Add `HumanCodeReview` and terminal `Completed` behavior.
-   - Define one transition-result marker schema for Agent Tasks, Agentic Workflows, human reviewers, and future local Copilot tools.
+   - Define one transition-result marker schema for Agentic Workflows, human reviewers, and future local Copilot tools.
    - Clarify that edited or deleted comments are ignored for the POC; only newly created comments are processed.
 3. [x] Document required repository configuration:
-   - `AUTODEV_AGENT_TASKS_TOKEN`: user-to-server token with Agent Tasks read/write permission, stored as an Actions secret and never exposed to agents.
-   - `AUTODEV_CALLBACK_TOKEN`: repository-scoped token used only for agent or Agentic Workflow issue callbacks; it must be distinct from the Agent Tasks token. A fine-grained PAT requires `issues: write`, so the POC's comment-only boundary is enforced primarily by the MCP/safe-output tool allowlist rather than by a comment-specific token permission.
-   - An Agents secret or repository MCP configuration exposing only the GitHub `add_issue_comment` write operation to Agent Task agents.
-   - Read-only GitHub MCP access plus the `web_search` toolset for the Research agent.
-   - gh-aw v0.82.14 or the repository-pinned version for authoring and compiling the CodeReview source workflow. `copilot-setup-steps.yml` installs it in the Copilot cloud-agent environment; the compiled CodeReview lock workflow is self-contained and does not require the CLI at runtime.
+   - `AUTODEV_CALLBACK_TOKEN`: repository-scoped token used only by the `add-comment` safe-output job for Agentic Workflow issue callbacks. A fine-grained PAT requires `issues: write`, so the POC's comment-only boundary is enforced by the safe-output allowlist rather than by a comment-specific token permission. The orchestrator reads its login at startup and accepts automated results only from that identity.
+   - Each Agentic Workflow reads the repository through the built-in GitHub MCP server in `gh-proxy` mode using the workflow's own `GITHUB_TOKEN`; no separate Copilot MCP or Agents-secret configuration is required.
+   - gh-aw v0.82.14 or the repository-pinned version for authoring and compiling the AutoDev Agentic Workflows. `copilot-setup-steps.yml` installs it in the Copilot cloud-agent environment; the compiled lock workflows are self-contained and do not require the CLI at runtime.
 4. [x] Define the POC label contract in the requirements and setup documentation; Milestone 1 will encode these values in `config.mjs`:
    - `autodev` as the trigger and reconciliation-discovery label.
    - `autodev/ready-for-plan-review`, `autodev/ready-for-code-review`, and `autodev/blocked` as the only state labels because they identify states requiring human attention.
@@ -98,7 +97,7 @@ The exact module split may be collapsed if implementation reveals that a module 
 **Completion criteria**
 
 - [x] The approved plan exists at the requested repository path.
-- [x] Required secrets, MCP capabilities, labels, and GitHub/Copilot plan prerequisites are documented with least-privilege permissions.
+- [x] Required secrets, labels, and GitHub/Copilot prerequisites are documented with least-privilege permissions.
 - [x] The requirements contain complete callback, human-review, recovery, and terminal-state contracts.
 
 ## Milestone 1: Build and test the state-machine core - Complete
@@ -120,7 +119,7 @@ The exact module split may be collapsed if implementation reveals that a module 
      - Blocked -> the most recent task state preceding Blocked, after a trusted human retry decision
    - Branch naming convention `autodev/issue-<number>`.
    - Artifact paths under `autodev/issues/<number>/` (outside `.github/` so Agentic Workflow push safe outputs can commit them).
-   - Allowed changed-file patterns per Agent Task state.
+   - Allowed changed-file patterns per Agentic Workflow state.
 2. [x] Implement current-task parsing and serialization for `autodev-task:v1` fenced-marker comments:
    - Validate schema version, issue number, sequence, current state, execution ID, attempt, ref, SHA, and timestamp.
    - Select the highest valid orchestrator-authored sequence.
@@ -184,7 +183,7 @@ The exact module split may be collapsed if implementation reveals that a module 
    - Ignore canonical `autodev-task` comments as trigger inputs.
    - Ignore comments authored by the orchestrator identity.
    - Process external execution results and trusted human-authored results only.
-6. [x] Initially support a dry-run handler for Research so Initialization can be validated before real Agent Tasks are enabled.
+6. [x] Initially support a dry-run handler for Research so Initialization can be validated before the real Research Agentic Workflow is enabled.
 7. [x] Add mocked-fetch tests covering pagination, existing branches, duplicate trigger events, canonical comment creation, self-authored comment suppression, consistent concurrency inputs, and API failures.
 
 **Completion criteria**
@@ -193,48 +192,46 @@ The exact module split may be collapsed if implementation reveals that a module 
 - [x] The issue contains a valid sequence-1 canonical `Initialization` record followed by a callback-identity Research handoff.
 - [x] Duplicate events do not create duplicate branches or state transitions.
 
-## Milestone 3: Integrate Agent Tasks and complete Research - Implemented
+## Milestone 3: Run Research as an Agentic Workflow - Complete
 
-**Status:** Implementation complete as of 2026-07-23. Live Agent Task validation requires these changes and the custom agent to be merged to the default branch.
+**Status:** Complete as of 2026-07-24. Research runs live end-to-end as a gh-aw Agentic Workflow: Initialization hands off, the orchestrator dispatches `autodev-research.lock.yml`, and the worker commits its artifact to the tracking pull request and posts the `autodev-result:v1` callback.
 
-1. [x] Implement `agent-tasks-client.mjs` around:
-   - `POST /agents/repos/{owner}/{repo}/tasks`
-   - `GET /agents/repos/{owner}/{repo}/tasks/{task_id}`
-   - Required preview headers and explicit error reporting.
-   - Existing `head_ref`, `custom_agent`, and `create_pull_request: false`, plus `base_ref` so the agent commits to the pre-created issue branch through its open tracking pull request. The preview API ignores `head_ref` supplied on its own (the agent then creates its own `copilot/*` branch and pull request), so AutoDev opens the issue pull request during Initialization and always sends `head_ref` and `base_ref` together.
-2. [x] Keep the Agent Tasks token isolated to the client and workflow environment. Never include it in prompts, branches, artifacts, or agent MCP configuration.
-3. [x] Create `autodev-research.agent.md`:
-   - The agent should instruct Copilot to thoroughly research the issue and produce a single artifact at the configured path.
-   - Restrict it to Research responsibilities and the Research artifact path.
-   - Give it read/search/edit/execute capabilities, read-only repository access, configured web search, and only the callback issue-comment write tool.
+1. [x] Add the Research workflow constant to `config.mjs` (`WORKFLOWS[research] = 'autodev-research.lock.yml'`) and a `github-client.dispatchWorkflow` REST wrapper. Handler type (transition semantics) stays decoupled from the launch substrate (workflow dispatch): every AI-assisted state shares the single `AGENTIC_WORKFLOW` handler, and a workflow's read-only or producer nature is expressed by the safe outputs it declares rather than by a distinct handler type.
+2. [x] Dispatch Research with the issue number, branch, recorded head SHA, tracking pull request number, artifact path, attempt, and an orchestrator-generated correlation id. `workflow_dispatch` does not return a run id, so the correlation id is the canonical `executionId`.
+3. [x] Author `autodev-research.md` (compiled to `autodev-research.lock.yml`):
+   - Read-only agent permissions; GitHub access via the built-in MCP server in `gh-proxy` mode using `GITHUB_TOKEN`; network defaults for web research.
+   - Treat the issue title, body, and any web content as untrusted data.
+   - Write a single research artifact at the configured path and commit it with the `push-to-pull-request-branch` safe output. Because gh-aw validates the whole base..head diff (which always includes the initialization scaffold), the worker uses no `allowed-files`; it sets `protected-files: allowed` and `checkout.fetch-depth: 0` so the merge-base is available, and the orchestrator's change policy is the authoritative changed-file guard.
    - Require citations or source links in the research artifact.
-   - Require a final structured callback whose branch, SHA, artifact path, and requested next state match the task prompt.
-   - Merge the agent definition to the default branch before attempting a live Agent Task, because cloud custom-agent resolution uses repository-visible/default-branch agent definitions.
-4. [x] Launch Research from the follow-up run triggered by the Initialization handoff, using a deterministic prompt containing issue context, branch/ref expectations, artifact path, allowed paths, and callback contract. Record the returned Agent Task ID in the new Research `autodev-task` comment.
-5. [x] Authenticate and parse Research callback comments, then stop cleanly at the deferred Design boundary. Design-state processing will validate the Agent Task, branch, SHA, changed files, and artifact in Milestone 4.
-6. [x] Add integration-style tests using mocked Agent Tasks and GitHub API responses.
+   - Post exactly one callback with the `add-comment` safe output under `AUTODEV_CALLBACK_TOKEN`, containing a visible summary and one fenced `autodev-result:v1` marker whose branch, SHA, artifact path, and requested next state match the dispatch inputs.
+   - Compile with `gh aw compile autodev-research` and commit both the `.md` source and generated `.lock.yml`.
+4. [x] Launch Research from the follow-up orchestrator run triggered by the Initialization handoff, after re-validating the transition and confirming the recorded head SHA still matches the live branch head. Record the correlation id in the new Research `autodev-task` comment.
+5. [x] Authenticate and parse Research callback comments, then stop cleanly at the deferred Design boundary. Design-state processing will validate the branch, SHA, changed files, and artifact in Milestone 4.
+6. [x] Add integration-style tests using mocked GitHub API responses and assert that the compiled workflow and its callback safe output are committed.
+
+**Known limitation:** the safe-output job commits after the agent finishes, so the callback echoes the pre-dispatch `head_sha`. Research -> Design does not require SHA equality for a producer state, so this passes; when Design lands, the orchestrator must re-resolve the actual branch head on callback rather than trusting the reported SHA.
 
 **Completion criteria**
 
-- [ ] A labeled test issue progresses from Initialization through a real Research Agent Task.
-- [ ] Research commits its artifact to the shared issue branch.
+- [x] A labeled test issue progresses from Initialization through a real Research Agentic Workflow run.
+- [x] Research commits its artifact to the shared issue branch's tracking pull request.
 - [x] A valid callback is recognized as a Design request without invoking an unimplemented Design handler.
 - [ ] Design validation rejects invalid callbacks or out-of-scope changes before writing canonical Design state.
 
 ## Milestone 4: Add Design and SecurityReview, including feedback loops
 
-1. Implement the Design handler that validates the completed Research task, branch head, changes since the Research task's starting SHA, and required Research artifact before recording or launching Design.
-2. Create `autodev-design.agent.md`:
+1. Implement the Design handler that validates the completed Research run, branch head, changes since the Research run's starting SHA, and required Research artifact before recording or launching Design.
+2. Author `autodev-design.md` (compiled to `autodev-design.lock.yml`):
    - Consume the issue, Research artifact, and any prior security or human feedback.
    - Write only the issue Design artifact.
    - Request Research when specific missing research is identified; otherwise request SecurityReview.
    - Persist the selected `nextState` and rationale in a machine-readable block in the committed Design artifact so reconciliation does not depend solely on the callback.
-3. Create `autodev-security-review.agent.md`:
+3. Author `autodev-security-review.md` (compiled to `autodev-security-review.lock.yml`):
    - Consume the Design artifact and relevant code.
    - Produce a threat model and security-review artifact.
    - Request Design when blocking findings require changes; otherwise request HumanPlanReview.
    - Persist the selected `nextState` and rationale in a machine-readable block in the committed SecurityReview artifact.
-4. Reuse the shared Agent Task launcher and callback validator with state-specific policies rather than duplicating orchestration logic.
+4. Reuse the shared workflow-dispatch launcher and callback validator with state-specific policies rather than duplicating orchestration logic.
 5. Validate allowed file paths and required artifacts independently for each state by diffing the preceding canonical `headSha` against the callback `headSha`.
 6. Increment attempts on each re-entry and include prior feedback in prompts.
 7. Protect against stale callbacks from previous Design or SecurityReview attempts.
@@ -258,12 +255,12 @@ The exact module split may be collapsed if implementation reveals that a module 
    - The result requests an allowed `nextState` and references the current branch head SHA.
    - The comment was created, not edited.
 3. Route `request-changes` to Design with the review summary and `approve` to Implementation.
-4. Create `autodev-implementation.agent.md`:
+4. Author `autodev-implementation.md` (compiled to `autodev-implementation.lock.yml`):
    - Consume the approved Design and SecurityReview artifacts plus human feedback.
-   - Modify implementation and test files while preserving the approved artifacts.
+   - Modify implementation and test files while preserving the approved artifacts. Because Implementation must be able to change most of the repository, its `push-to-pull-request-branch` safe output uses `protected-files: allowed` and no `allowed-files`; the orchestrator's change policy is the authoritative guard and forbids modifying AutoDev control files or any issue artifacts.
    - Run the repository's existing tests/builds when available.
    - Never create the pull request itself.
-   - Report a structured callback with the final head SHA and Implementation outcome.
+   - Report a structured callback with the Implementation outcome. Because the safe-output commit lands after the agent finishes, the orchestrator re-resolves the branch head rather than trusting a reported post-commit SHA.
 5. After callback validation, have the orchestrator:
    - Add `pull-requests: write` to the orchestrator workflow when PR operations are introduced.
    - Verify changed files between the preceding canonical SHA and the reported Implementation SHA, plus the final branch head.
@@ -320,28 +317,28 @@ The exact module split may be collapsed if implementation reveals that a module 
 
 1. Create `.github/workflows/autodev-reconcile.yml` on a conservative schedule plus manual dispatch.
 2. Find AutoDev issues using the persistent `autodev` trigger label and parse each latest canonical state.
-3. For stale Agent Task states:
-   - Query the recorded task ID.
-   - Leave queued or in-progress tasks alone until a hard deadline.
-   - Reconcile completed tasks whose callback was missed by validating branch artifacts. For decision states, read the persisted machine-readable decision from the artifact before synthesizing the transition; never guess a route.
-   - Retry failed, timed-out, cancelled, or missing tasks up to a configured maximum.
-   - Transition `idle` or `waiting_for_user` tasks to canonical Blocked state for human attention.
-4. Detect launches that failed before their task ID was recorded:
-   - List recent repository Agent Tasks.
-   - Correlate candidates using branch artifact, head ref, creation window, and the deterministic execution correlation included in the task prompt/session details.
-   - Adopt a single unambiguous matching task; transition to Blocked rather than guessing when multiple candidates match.
-5. For stale CodeReview workflow execution:
-   - Locate the run by workflow and correlation information where possible.
+3. For stale Agentic Workflow executions:
+   - Locate the dispatched workflow run by the correlation id embedded in its run name and the recorded canonical state.
+   - Leave queued or in-progress runs alone until a hard deadline.
+   - Reconcile completed runs whose callback was missed by validating branch artifacts. For decision states, read the persisted machine-readable decision from the artifact before synthesizing the transition; never guess a route.
+   - Redispatch failed, timed-out, cancelled, or missing runs up to a configured maximum.
+   - Transition runs that report a missing capability or input (`missing-tool`/`missing-data`) to canonical Blocked state for human attention.
+4. Detect launches that failed after the canonical task comment was written but before the workflow run started:
+   - List recent runs of the state's workflow.
+   - Correlate candidates using the correlation id in the run name, plus branch artifact and creation window.
+   - Adopt a single unambiguous matching run; transition to Blocked rather than guessing when multiple candidates match or none is found after the deadline.
+5. For stale review (CodeReview) executions, which produce no branch artifact:
+   - Locate the run by workflow and correlation id where possible.
    - Redispatch only when no matching active or completed run exists.
 6. Dispatch per-issue reconciliation through the primary orchestrator workflow so normal per-issue concurrency and transition validation remain authoritative.
 7. Add configuration for stage-specific stale thresholds, hard deadlines, and maximum attempts.
-8. Add tests for every Agent Task state, missed callbacks, persisted decision recovery, orphan launch adoption, ambiguous orphan blocking, retry exhaustion, and duplicate reconciliation runs.
+8. Add tests for every workflow-run status, missed callbacks, persisted decision recovery, orphan launch adoption, ambiguous orphan blocking, retry exhaustion, and duplicate reconciliation runs.
 
 **Completion criteria**
 
 - The reconciler never launches a second worker while a matching execution is active.
 - Missed callbacks can be recovered without bypassing artifact and transition validation.
-- Exhausted or interactive tasks enter canonical Blocked state rather than relying on a non-authoritative label or retrying indefinitely.
+- Exhausted runs, or runs reporting a missing capability or input, enter canonical Blocked state rather than relying on a non-authoritative label or retrying indefinitely.
 
 ## Milestone 8: End-to-end validation, hardening, and demonstration
 
@@ -358,10 +355,9 @@ The exact module split may be collapsed if implementation reveals that a module 
 4. Confirm canonical comments remain append-only and the three human-attention labels accurately reflect the latest canonical state.
 5. Confirm secrets are absent from logs, comments, prompts, commits, and generated workflow artifacts.
 6. Document the demonstration procedure, architecture diagram, known POC limitations, and production decisions still open:
-   - Replace the generic write-enabled MCP comment tool with a dedicated callback tool.
-   - Decide between Agent Tasks and gh-aw as the single production execution model.
-   - Replace PATs with a managed user-to-server credential strategy when supported.
-   - Consider tamper-resistant state storage, richer status, stronger reviewer policy, cost budgets, and preview API compatibility.
+   - Replace the callback PAT (`issues: write`) with a dedicated, comment-only callback identity.
+   - Replace PATs with a managed GitHub App or user-to-server credential strategy when supported.
+   - Consider tamper-resistant state storage, richer status, stronger reviewer policy, and cost budgets.
 
 **Completion criteria**
 
@@ -372,12 +368,12 @@ The exact module split may be collapsed if implementation reveals that a module 
 ## Cross-cutting implementation rules
 
 - The orchestrator is the only writer of canonical `autodev-task` records.
-- The orchestrator uses `GITHUB_TOKEN` for its comments; only external callback comments use `AUTODEV_CALLBACK_TOKEN`.
+- The orchestrator uses `GITHUB_TOKEN` for its comments; only Agentic Workflow callback comments use `AUTODEV_CALLBACK_TOKEN`.
 - Agents and Agentic Workflows submit requests; they never directly choose an authoritative transition.
 - Re-read canonical state immediately before every mutation and use per-issue concurrency.
-- Keep GitHub API, Agent Tasks API, parsing, transition, and handler logic separately testable.
+- Keep GitHub API, workflow-dispatch, parsing, transition, and handler logic separately testable.
 - Surface errors as visible issue comments consistent with the workflow; do not silently ignore invalid callbacks.
-- Never expose the Agent Tasks credential to an agent or MCP server.
+- Never expose the callback credential to an agent, its prompt, or the MCP server; only the callback safe-output job may reference it.
 - Validate every reported branch, SHA, artifact, execution ID, attempt, and changed-file set.
 - Validate each execution's changed files against the preceding canonical `headSha`, not against the default branch.
 - Use exact workflow/action versions and retain the generated gh-aw lock file.
@@ -390,16 +386,16 @@ The exact module split may be collapsed if implementation reveals that a module 
 - Cross-repository orchestration.
 - Automatic merge.
 - Production-grade external state storage.
-- A dedicated callback MCP service; the restricted GitHub MCP comment operation is the temporary POC mechanism.
+- A dedicated callback service or identity; the gh-aw `add-comment` safe output with the callback PAT is the temporary POC mechanism.
 - Comprehensive cost accounting beyond logging execution IDs, attempts, and workflow/task links.
 
 ## Notes and risks
 
-- The Agent Tasks API is public preview and requires a user-to-server credential. The client must fail explicitly when permissions, subscription, or API behavior are incompatible.
-- The Agent Tasks credential is tied to a specific user identity and Copilot entitlement. Setup documentation must identify its owner, rotation procedure, and demo reproducibility implications.
+- gh-aw safe outputs run as separate jobs after the agent finishes, so a worker cannot report its post-commit head SHA in the callback. The orchestrator must re-resolve the branch head on callback for any state that requires SHA validation.
+- The callback PAT is tied to a specific user identity. Setup documentation must identify its owner and rotation procedure so demos remain reproducible.
 - A workflow-created comment using `GITHUB_TOKEN` will not trigger the issue-comment orchestrator. Agentic Workflow callback authentication is therefore part of the functional design, not optional hardening.
 - Conversely, orchestrator comments must use `GITHUB_TOKEN`; using the callback PAT/App identity for canonical comments would retrigger the workflow and could create a comment loop.
-- `workflow_dispatch` does not necessarily return a workflow run ID. Use the caller-generated correlation ID as the canonical CodeReview execution ID and include it in the run name and callback.
-- Starting an external execution and recording its ID cannot be fully atomic. The reconciliation milestone must detect incomplete launch records and avoid duplicate work; until then, the happy-path milestones should document this POC limitation.
-- The implementation must not assume `.github/mcp.json` alone configures cloud-agent repository MCP access. Repository Copilot settings and Agents secrets require explicit setup.
-- The callback PAT's real token-level blast radius is repository `issues: write`; the POC depends on MCP and safe-output tool allowlists to narrow that capability to comments. This residual prompt-injection risk must be demonstrated and documented.
+- `workflow_dispatch` does not necessarily return a workflow run ID. Use the caller-generated correlation ID as the canonical execution ID and include it in the run name and callback.
+- Starting an execution and recording its ID cannot be fully atomic. The reconciliation milestone must detect incomplete launch records and avoid duplicate work; until then, the happy-path milestones should document this POC limitation.
+- gh-aw `push-to-pull-request-branch` validates the entire base..head diff and refuses pushes under `.github/**`, so issue artifacts live under `autodev/issues/<number>/` and producer workflows rely on `protected-files: allowed` plus the orchestrator change policy rather than per-file allowlists.
+- The callback PAT's real token-level blast radius is repository `issues: write`; the POC depends on the gh-aw safe-output allowlist (a single `add-comment`) to narrow that capability to comments. This residual prompt-injection risk must be demonstrated and documented.

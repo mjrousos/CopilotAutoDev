@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phases 1–4 (author, compile, wire, test) are implemented on branch `spike/gh-aw-research`, plus the post-review adaptations below. Phase 5 (live validation) is pending: it requires merging the workflow and wiring to the default branch and labeling a fresh test issue, then observing the runs. This plan covers a single reversible spike: re-implement the **Research** state as a GitHub Agentic Workflow (gh-aw) instead of a Copilot Agent Task. It does not change any other state. If the spike succeeds, a follow-on plan will migrate Design, SecurityReview, and Implementation and retire the Agent Tasks client.
+Complete. Phases 1–5 are done: the Research state runs end-to-end as a GitHub Agentic Workflow (gh-aw), validated live on a fresh test issue. Following that success, the repository fully adopted gh-aw as the single AI execution model: the Agent Tasks client, its tests, the `autodev-research.agent.md` custom agent, the `buildResearchPrompt`/`startResearch` launcher code, and the `AUTODEV_AGENT_TASKS_TOKEN` secret were removed, and `README.md`, `.github/copilot-instructions.md`, and `initial-implementation.plan.md` were revised AW-first. This plan is retained as the record of why AutoDev moved off the Agent Tasks API and the gh-aw constraints that shaped the design.
 
 ## Code review findings and adaptations
 
@@ -132,7 +132,7 @@ Running the Copilot CLI headless as an orchestrator step is the most controllabl
 ## Rollback
 
 - Before merge: abandon the spike branch; `main` is unchanged.
-- After merge, if needed: revert the Research handler mapping to `AGENT_TASK` and restore the Agent Task launch in `advanceToResearch`. The Agent Tasks client and `autodev-research.agent.md` remain in place throughout the spike, so reverting is a small wiring change.
+- The Agent Tasks path has since been removed from `main`. Rolling back to Agent Tasks would now require restoring `agent-tasks-client.mjs`, the `AGENT_TASK` handler mapping, and the `startResearch` launcher from git history — no longer a small wiring change.
 
 ## Risks and open questions
 
@@ -142,11 +142,13 @@ Running the Copilot CLI headless as an orchestrator step is the most controllabl
 - **Callback identity blast radius.** The callback identity retains repository `issues: write`; the safe-output allowlist is what narrows it to a comment. This residual prompt-injection risk must be demonstrated and documented, consistent with the existing plan.
 - **Branch-push target validation.** The workflow must reject any push target that does not exactly match the sanitized dispatched `head_ref`/PR input, so a compromised prompt cannot redirect the commit.
 
-## Follow-on (only if the spike succeeds)
+## Follow-on
 
-1. Migrate Design, SecurityReview, and Implementation to gh-aw using the same dispatch-and-callback shape and their existing per-state change policies and decision blocks. Implementation needs broad file-write access — see "Broad file-write access for Implementation" below.
-2. Remove the now-unused `agent-tasks-client.mjs`, its tests, the `AUTODEV_AGENT_TASKS_TOKEN` secret, and `autodev-research.agent.md`; update `README.md` and `initial-implementation.plan.md` to describe gh-aw as the single execution model.
-3. Reassess whether the async callback handshake is still needed per state or whether some states can run synchronously.
+Research is migrated and live, and the Agent Tasks path has been fully removed (item 2). Design, SecurityReview, and Implementation are not yet authored; they will follow the same gh-aw model in their milestones (items 1 and 3 remain open).
+
+1. [ ] Migrate Design, SecurityReview, and Implementation to gh-aw using the same dispatch-and-callback shape and their existing per-state change policies and decision blocks. Implementation needs broad file-write access — see "Broad file-write access for Implementation" below.
+2. [x] Remove the now-unused `agent-tasks-client.mjs`, its tests, the `AUTODEV_AGENT_TASKS_TOKEN` secret usage, and `autodev-research.agent.md`; update `README.md` and `initial-implementation.plan.md` to describe gh-aw as the single execution model.
+3. [ ] Reassess whether the async callback handshake is still needed per state or whether some states can run synchronously.
 
 ## Broad file-write access for Implementation
 

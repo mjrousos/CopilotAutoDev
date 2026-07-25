@@ -18,7 +18,7 @@ import {
 } from '../validation.mjs';
 
 test('state handlers and labels match the POC contract', () => {
-  assert.equal(getStateHandler(STATES.RESEARCH), HANDLERS.AGENT_TASK);
+  assert.equal(getStateHandler(STATES.RESEARCH), HANDLERS.AGENTIC_WORKFLOW);
   assert.equal(getStateHandler(STATES.CODE_REVIEW), HANDLERS.AGENTIC_WORKFLOW);
   assert.equal(getStateHandler(STATES.HUMAN_PLAN_REVIEW), HANDLERS.HUMAN);
   assert.deepEqual(Object.values(LABELS), [
