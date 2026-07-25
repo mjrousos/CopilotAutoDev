@@ -142,11 +142,13 @@ Running the Copilot CLI headless as an orchestrator step is the most controllabl
 - **Callback identity blast radius.** The callback identity retains repository `issues: write`; the safe-output allowlist is what narrows it to a comment. This residual prompt-injection risk must be demonstrated and documented, consistent with the existing plan.
 - **Branch-push target validation.** The workflow must reject any push target that does not exactly match the sanitized dispatched `head_ref`/PR input, so a compromised prompt cannot redirect the commit.
 
-## Follow-on (completed)
+## Follow-on
 
-1. [x] Migrate Design, SecurityReview, and Implementation to gh-aw using the same dispatch-and-callback shape and their existing per-state change policies and decision blocks. Implementation needs broad file-write access — see "Broad file-write access for Implementation" below. (Research is done and live; Design/SecurityReview/Implementation remain to be authored per their milestones, but all now follow the gh-aw model.)
+Research is migrated and live, and the Agent Tasks path has been fully removed (item 2). Design, SecurityReview, and Implementation are not yet authored; they will follow the same gh-aw model in their milestones (items 1 and 3 remain open).
+
+1. [ ] Migrate Design, SecurityReview, and Implementation to gh-aw using the same dispatch-and-callback shape and their existing per-state change policies and decision blocks. Implementation needs broad file-write access — see "Broad file-write access for Implementation" below.
 2. [x] Remove the now-unused `agent-tasks-client.mjs`, its tests, the `AUTODEV_AGENT_TASKS_TOKEN` secret usage, and `autodev-research.agent.md`; update `README.md` and `initial-implementation.plan.md` to describe gh-aw as the single execution model.
-3. Reassess whether the async callback handshake is still needed per state or whether some states can run synchronously.
+3. [ ] Reassess whether the async callback handshake is still needed per state or whether some states can run synchronously.
 
 ## Broad file-write access for Implementation
 

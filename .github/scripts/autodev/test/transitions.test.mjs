@@ -177,9 +177,12 @@ test('CodeReview is validated as a standard Agentic Workflow state', () => {
   assert.doesNotThrow(() => validateTransitionRequest(current, result));
   assert.doesNotThrow(() => validateTransitionRequest(current, { ...result, headSha: SHA }));
 
-  // It is still an automated state, so a non-success (human) outcome is rejected.
+  // It is still an automated state, so a non-success (human) outcome is
+  // rejected. Result-record validation rejects a human outcome on a non-human
+  // state before the transition rules run, so the specific code is
+  // `invalid-human-state`.
   assert.throws(
     () => validateTransitionRequest(current, { ...result, outcome: RESULT_OUTCOMES.APPROVED }),
-    (error) => error instanceof ContractValidationError,
+    (error) => error instanceof ContractValidationError && error.code === 'invalid-human-state',
   );
 });
