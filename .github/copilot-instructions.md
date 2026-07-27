@@ -41,9 +41,9 @@ The core modules have distinct responsibilities:
 - `transitions.mjs` is the central transition-request validator.
 - `validation.mjs` owns trusted-author and repository-path/change-policy checks.
 - `github-client.mjs` wraps only the GitHub REST operations currently needed by implemented milestones.
-- `handlers/research.mjs` launches Research. Design callback processing is deferred until the Design milestone.
+- `handlers/advance.mjs` is the shared launcher for every dispatched producer state (Research, Design, SecurityReview): it validates the requested transition and the source state's committed diff, dispatches the target workflow, and records canonical state. `handlers/initialization.mjs` runs Initialization inline.
 
-Every AI-assisted state (Research, Design, SecurityReview, Implementation, and CodeReview) runs as a GitHub Agentic Workflow (gh-aw) dispatched by the orchestrator via `workflow_dispatch`. Producer states (Research/Design/SecurityReview/Implementation) push artifacts and changes to the issue branch's tracking pull request through the `push-to-pull-request-branch` safe output; CodeReview is read-only. Each workflow reports its result with an `autodev-result:v1` callback posted by the `add-comment` safe output under the callback identity. See `.github/plans/initial-requirements.md` and `.github/plans/initial-implementation.plan.md` before changing behavior or scope.
+Every AI-assisted state (Research, Design, SecurityReview, Implementation, and CodeReview) runs as a GitHub Agentic Workflow (gh-aw) dispatched by the orchestrator via `workflow_dispatch`. Producer states (Research/Design/SecurityReview/Implementation) push artifacts and changes to the issue branch's tracking pull request through the `push-to-pull-request-branch` safe output; CodeReview is read-only. Each workflow reports its result with an `autodev-result:v1` callback posted by the `add-comment` safe output under the callback identity. Because a producer's safe output commits after the callback is posted, the orchestrator re-resolves the live branch head and validates the committed diff against the SHA recorded when the state was launched, rather than trusting the callback SHA. See `.github/plans/initial-requirements.md` and `.github/plans/initial-implementation.plan.md` before changing behavior or scope.
 
 ## Conventions
 

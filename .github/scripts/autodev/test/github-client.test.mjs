@@ -256,6 +256,32 @@ test('dispatchWorkflow rejects non-object inputs', async () => {
   );
 });
 
+test('compareCommits requests the base...head range and returns the comparison', async () => {
+  const headSha = '89abcdef0123456789abcdef0123456789abcdef';
+  let request;
+  const client = createClient(async (url) => {
+    request = url.toString();
+    return jsonResponse({
+      files: [{ filename: 'autodev/issues/42/research.md', status: 'added' }],
+    });
+  });
+
+  const comparison = await client.compareCommits(SHA, headSha);
+
+  assert.match(request, new RegExp(`/compare/${SHA}\\.\\.\\.${headSha}$`));
+  assert.deepEqual(comparison.files, [
+    { filename: 'autodev/issues/42/research.md', status: 'added' },
+  ]);
+});
+
+test('compareCommits rejects a non-object response body', async () => {
+  const client = createClient(async () => jsonResponse([{ filename: 'x' }]));
+  await assert.rejects(
+    client.compareCommits(SHA, 'main'),
+    (error) => error instanceof GitHubApiError && error.status === 502,
+  );
+});
+
 test('dispatchWorkflow trims surrounding whitespace from the ref and workflow name', async () => {
   let request;
   const client = createClient(async (url, options) => {

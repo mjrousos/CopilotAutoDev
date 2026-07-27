@@ -15,7 +15,7 @@ import {
 } from './task.mjs';
 import { isTrustedHumanComment } from './validation.mjs';
 import { initializeIssue } from './handlers/initialization.mjs';
-import { advanceToResearch } from './handlers/research.mjs';
+import { advanceState } from './handlers/advance.mjs';
 
 export const INVALID_STATE = 'invalid';
 
@@ -117,9 +117,13 @@ export async function dispatchAutoDevEvent({
           now,
         });
       case STATES.RESEARCH:
-        // Reached only from a validated Initialization -> Research handoff
-        // result; the label and dispatch paths always resolve to Initialization.
-        return advanceToResearch({
+      case STATES.DESIGN:
+      case STATES.SECURITY_REVIEW:
+        // All dispatched producer states share one launcher. It reads canonical
+        // state to learn the source, validates the requested transition and the
+        // source's committed output, then dispatches the target workflow. The
+        // Initialization handoff resolves to RESEARCH here.
+        return advanceState({
           github,
           issueNumber,
           orchestratorLogin,

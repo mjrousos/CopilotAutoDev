@@ -90,6 +90,8 @@ export const DEFAULT_ORCHESTRATOR_LOGIN = 'github-actions[bot]';
 // transition semantics, which remain defined by STATE_HANDLERS.
 export const WORKFLOWS = Object.freeze({
   [STATES.RESEARCH]: 'autodev-research.lock.yml',
+  [STATES.DESIGN]: 'autodev-design.lock.yml',
+  [STATES.SECURITY_REVIEW]: 'autodev-security-review.lock.yml',
 });
 
 const ARTIFACT_FILE_NAMES = Object.freeze({
