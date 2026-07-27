@@ -480,6 +480,42 @@ test('advanceState re-enters Design from a SecurityReview feedback loop', async 
   assert.equal(dispatched[0].inputs.head_sha, SHA_SECURITY);
 });
 
+test('advanceState re-enters Design when a human plan review requests changes', async () => {
+  const { github, dispatched } = makeGitHub({
+    comments: [
+      taskComment({ sequence: 1, state: STATES.INITIALIZATION, headSha: SHA_INIT }),
+      taskComment({ sequence: 2, state: STATES.RESEARCH, headSha: SHA_INIT, attempt: 1 }),
+      taskComment({ sequence: 3, state: STATES.DESIGN, headSha: SHA_RESEARCH, attempt: 1 }),
+      taskComment({ sequence: 4, state: STATES.SECURITY_REVIEW, headSha: SHA_DESIGN, attempt: 1 }),
+      taskComment({ sequence: 5, state: STATES.HUMAN_PLAN_REVIEW, headSha: SHA_SECURITY, attempt: 1 }),
+    ],
+    // A human review does not move the branch head, so no producer diff runs.
+    liveHeadSha: SHA_SECURITY,
+  });
+
+  const outcome = await advanceState({
+    github,
+    issueNumber: ISSUE,
+    result: result({
+      state: STATES.HUMAN_PLAN_REVIEW,
+      nextState: STATES.DESIGN,
+      headSha: SHA_SECURITY,
+      outcome: RESULT_OUTCOMES.CHANGES_REQUESTED,
+      decisionRationale: 'Tighten the token-scope section before implementation.',
+    }),
+    correlationId: 'corr-design-3',
+  });
+
+  assert.equal(outcome.fromState, STATES.HUMAN_PLAN_REVIEW);
+  assert.equal(outcome.state, STATES.DESIGN);
+  assert.equal(outcome.task.sequence, 6);
+  assert.equal(outcome.task.attempt, 2);
+  assert.equal(outcome.task.headSha, SHA_SECURITY);
+  assert.equal(dispatched[0].workflowFileName, 'autodev-design.lock.yml');
+  assert.equal(dispatched[0].inputs.attempt, '2');
+  assert.equal(dispatched[0].inputs.feedback, 'Tighten the token-scope section before implementation.');
+});
+
 test('advanceState ignores a stale callback whose source is not the current state', async () => {
   const { github, dispatched } = makeGitHub({
     comments: [
