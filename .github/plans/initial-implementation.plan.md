@@ -249,6 +249,8 @@ Each AI-assisted state's behavior lives entirely in its Agentic Workflow `.md` s
 - [x] Every loop produces a new append-only canonical sequence and preserves prior artifacts/history.
 - [ ] Live validation of the Design and SecurityReview workflows on a real issue (deferred to Milestone 8).
 
+**Deferred hardening (to Milestone 7, reconciliation):** In the normal flow the orchestrator trusts the callback's `nextState` after confirming the source committed its artifact within policy; it does not yet re-read the committed `autodev-decision:v1` block to confirm the callback matches it. Cross-checking the callback against the persisted decision belongs with reconciliation, which already reads that block to recover a lost callback, and enforcing it during normal flow before the workflows are live-validated would make a healthy run depend on exact agent artifact formatting. When Milestone 7 lands, verify the callback's `state`/`nextState` equal the decision block committed at the resolved head.
+
 ## Milestone 5: Implement HumanPlanReview, Implementation, and deterministic PR creation
 
 1. When SecurityReview requests HumanPlanReview:

@@ -126,20 +126,45 @@ export async function advanceState({
       );
     }
     const comparison = await github.compareCommits(currentTask.headSha, liveHeadSha);
-    const changedFiles = Array.isArray(comparison?.files)
-      ? comparison.files.map((file) => file.filename)
-      : [];
+    // compareCommits is a three-dot diff (base...head), computed from the merge
+    // base of the two commits. Trust it only when the recorded SHA IS that merge
+    // base, i.e. the live head descends from it — the append-only invariant the
+    // issue branch is supposed to hold. If the branch diverged (force-push or
+    // rebase), the diff would omit changes made relative to the recorded head,
+    // so reject rather than validate a partial file list.
+    if (comparison?.merge_base_commit?.sha !== currentTask.headSha) {
+      throw new ContractValidationError(
+        'divergent-branch-head',
+        `Issue branch ${currentTask.headRef} head ${liveHeadSha} does not descend from `
+          + `the recorded head ${currentTask.headSha}.`,
+      );
+    }
+    const files = Array.isArray(comparison?.files) ? comparison.files : [];
+    // A renamed file changes both its new path and its previous_filename, so
+    // both are subject to the source's change policy; extracting only filename
+    // would let a rename move a disallowed control file onto the artifact path.
+    const changedPaths = [];
+    for (const file of files) {
+      if (typeof file?.filename === 'string') {
+        changedPaths.push(file.filename);
+      }
+      if (typeof file?.previous_filename === 'string') {
+        changedPaths.push(file.previous_filename);
+      }
+    }
     // Check the required deliverable first so a producer that committed the
     // wrong files reports the missing artifact rather than only the disallowed
-    // paths. Both block the transition; the order only shapes the message.
+    // paths. The artifact must be present as a real write (added/modified/
+    // renamed), not merely referenced by a removal or a rename away from it.
     const sourceArtifact = getArtifactPath(sourceState, issueNumber);
-    if (!changedFiles.includes(sourceArtifact)) {
+    const artifactEntry = files.find((file) => file?.filename === sourceArtifact);
+    if (!artifactEntry || artifactEntry.status === 'removed') {
       throw new ContractValidationError(
         'missing-source-artifact',
         `${sourceState} did not produce its required artifact ${sourceArtifact}.`,
       );
     }
-    const disallowed = findDisallowedPaths(sourceState, issueNumber, changedFiles);
+    const disallowed = findDisallowedPaths(sourceState, issueNumber, changedPaths);
     if (disallowed.length > 0) {
       throw new ContractValidationError(
         'disallowed-source-changes',

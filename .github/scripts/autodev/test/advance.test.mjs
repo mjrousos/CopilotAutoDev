@@ -66,6 +66,7 @@ function makeGitHub({
   comments,
   liveHeadSha,
   compareFiles = [],
+  mergeBaseSha,
   pullRequest = { number: 77, html_url: 'https://example.test/pull/77' },
 } = {}) {
   const dispatched = [];
@@ -84,7 +85,13 @@ function makeGitHub({
     },
     async compareCommits(base, head) {
       compareCalls.push({ base, head });
-      return { files: compareFiles.map((filename) => ({ filename, status: 'modified' })) };
+      return {
+        // Default to a linear history where the recorded SHA is the merge base.
+        merge_base_commit: { sha: mergeBaseSha ?? base },
+        files: compareFiles.map((file) => (
+          typeof file === 'string' ? { filename: file, status: 'modified' } : file
+        )),
+      };
     },
     async findPullRequest(request) {
       assert.deepEqual(request, { head: HEAD_REF, base: 'main' });
@@ -293,6 +300,73 @@ test('advanceState rejects a producer that changed files outside its policy', as
       result: result({ state: STATES.RESEARCH, nextState: STATES.DESIGN, headSha: SHA_INIT }),
     }),
     (error) => error instanceof ContractValidationError && error.code === 'disallowed-source-changes',
+  );
+});
+
+test('advanceState rejects a rename that moves a disallowed path onto the artifact', async () => {
+  const { github } = makeGitHub({
+    comments: [
+      taskComment({ sequence: 1, state: STATES.INITIALIZATION, headSha: SHA_INIT }),
+      taskComment({ sequence: 2, state: STATES.RESEARCH, headSha: SHA_INIT }),
+    ],
+    liveHeadSha: SHA_RESEARCH,
+    // The artifact appears in the diff, but it is a rename of a control file, so
+    // the previous_filename must be policed too.
+    compareFiles: [
+      { filename: RESEARCH_ARTIFACT, status: 'renamed', previous_filename: '.github/scripts/autodev/config.mjs' },
+    ],
+  });
+
+  await assert.rejects(
+    advanceState({
+      github,
+      issueNumber: ISSUE,
+      result: result({ state: STATES.RESEARCH, nextState: STATES.DESIGN, headSha: SHA_INIT }),
+    }),
+    (error) => error instanceof ContractValidationError && error.code === 'disallowed-source-changes',
+  );
+});
+
+test('advanceState rejects a producer that removed its required artifact', async () => {
+  const { github } = makeGitHub({
+    comments: [
+      taskComment({ sequence: 1, state: STATES.INITIALIZATION, headSha: SHA_INIT }),
+      taskComment({ sequence: 2, state: STATES.RESEARCH, headSha: SHA_INIT }),
+    ],
+    liveHeadSha: SHA_RESEARCH,
+    compareFiles: [{ filename: RESEARCH_ARTIFACT, status: 'removed' }],
+  });
+
+  await assert.rejects(
+    advanceState({
+      github,
+      issueNumber: ISSUE,
+      result: result({ state: STATES.RESEARCH, nextState: STATES.DESIGN, headSha: SHA_INIT }),
+    }),
+    (error) => error instanceof ContractValidationError && error.code === 'missing-source-artifact',
+  );
+});
+
+test('advanceState rejects a producer whose head diverged from the recorded SHA', async () => {
+  const { github } = makeGitHub({
+    comments: [
+      taskComment({ sequence: 1, state: STATES.INITIALIZATION, headSha: SHA_INIT }),
+      taskComment({ sequence: 2, state: STATES.RESEARCH, headSha: SHA_INIT }),
+    ],
+    liveHeadSha: SHA_RESEARCH,
+    compareFiles: [RESEARCH_ARTIFACT],
+    // Merge base is not the recorded head: the branch diverged, so the three-dot
+    // diff would be computed from an unexpected ancestor.
+    mergeBaseSha: '0000000000000000000000000000000000000009',
+  });
+
+  await assert.rejects(
+    advanceState({
+      github,
+      issueNumber: ISSUE,
+      result: result({ state: STATES.RESEARCH, nextState: STATES.DESIGN, headSha: SHA_INIT }),
+    }),
+    (error) => error instanceof ContractValidationError && error.code === 'divergent-branch-head',
   );
 });
 
