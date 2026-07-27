@@ -43,6 +43,7 @@ The implementation will be delivered in independently usable milestones. Each mi
       handlers/
         initialization.mjs
         advance.mjs
+        human-plan-review.mjs
         shared.mjs
       validation.mjs
       reconcile.mjs
@@ -57,6 +58,7 @@ The implementation will be delivered in independently usable milestones. Each mi
         dispatcher.test.mjs
         initialization.test.mjs
         advance.test.mjs
+        human-plan-review.test.mjs
         workflows.test.mjs
         reconcile.test.mjs
   workflows/
@@ -253,17 +255,19 @@ Each AI-assisted state's behavior lives entirely in its Agentic Workflow `.md` s
 
 ## Milestone 5: Implement HumanPlanReview, Implementation, and deterministic PR creation
 
-1. When SecurityReview requests HumanPlanReview:
+**Status:** Partially implemented as of 2026-07-27. The HumanPlanReview handling is functionally complete: when SecurityReview requests HumanPlanReview the orchestrator validates SecurityReview's committed artifact, records canonical HumanPlanReview state, applies the `autodev/ready-for-plan-review` label, posts copy-paste `autodev-result:v1` instructions, and waits for a trusted human (or an external human-review tool acting as one) to post a result comment. Human authorization is already enforced generically: the workflow only processes `issue_comment: created` events (so edited comments are ignored), `determineState` accepts human outcomes only from `OWNER`/`MEMBER`/`COLLABORATOR` authors, and `validateTransitionRequest` requires the result to reference the current state, head SHA, and an allowed `nextState`. The `request-changes -> Design` exit works because it flows through the shared `advanceState` launcher (a human review is a non-producer source that re-dispatches Design). What remains is Implementation itself (items 4-5) and therefore the `approve -> Implementation` half of item 3, which currently resolves to `deferred-state`.
+
+1. [x] When SecurityReview requests HumanPlanReview:
    - Add the ready-for-plan-review label.
    - Post visible instructions and an example human-authored `autodev-result:v1` marker.
    - Store the exact reviewed `headSha` in canonical state.
-2. Accept human-authored result comments only when:
+2. [x] Accept human-authored result comments only when (enforced by the existing dispatcher and transition validation, not new M5 code):
    - The current state is HumanPlanReview.
    - `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`.
    - The result requests an allowed `nextState` and references the current branch head SHA.
    - The comment was created, not edited.
-3. Route `request-changes` to Design with the review summary and `approve` to Implementation.
-4. Author `autodev-implementation.md` (compiled to `autodev-implementation.lock.yml`):
+3. [~] Route `request-changes` to Design with the review summary (done, via `advanceState`) and `approve` to Implementation (deferred until Implementation exists).
+4. [ ] Author `autodev-implementation.md` (compiled to `autodev-implementation.lock.yml`):
    - Consume the approved Design and SecurityReview artifacts plus human feedback.
    - Modify implementation and test files while preserving the approved artifacts. Because Implementation must be able to change most of the repository, its `push-to-pull-request-branch` safe output uses `protected-files: allowed` and no `allowed-files`; the orchestrator's change policy is the authoritative guard and forbids modifying AutoDev control files or any issue artifacts.
    - Run the repository's existing tests/builds when available.

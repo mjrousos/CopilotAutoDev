@@ -16,6 +16,7 @@ import {
 import { isTrustedHumanComment } from './validation.mjs';
 import { initializeIssue } from './handlers/initialization.mjs';
 import { advanceState } from './handlers/advance.mjs';
+import { enterHumanPlanReview } from './handlers/human-plan-review.mjs';
 
 export const INVALID_STATE = 'invalid';
 
@@ -122,8 +123,21 @@ export async function dispatchAutoDevEvent({
         // All dispatched producer states share one launcher. It reads canonical
         // state to learn the source, validates the requested transition and the
         // source's committed output, then dispatches the target workflow. The
-        // Initialization handoff resolves to RESEARCH here.
+        // Initialization handoff resolves to RESEARCH here, and a human plan
+        // review that requests changes resolves to DESIGN here.
         return advanceState({
+          github,
+          issueNumber,
+          orchestratorLogin,
+          result: determination.result,
+          now,
+        });
+      case STATES.HUMAN_PLAN_REVIEW:
+        // Reached from the SecurityReview -> human-plan-review callback. The
+        // orchestrator records the state, labels the issue, and waits for a
+        // trusted human result comment (approve -> Implementation, deferred; or
+        // changes-requested -> Design, handled by advanceState above).
+        return enterHumanPlanReview({
           github,
           issueNumber,
           orchestratorLogin,
