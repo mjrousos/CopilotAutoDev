@@ -288,7 +288,7 @@ test('an initialization handoff result launches Research in the follow-up run', 
     callbackLogin: 'autodev-callback',
   });
 
-  assert.equal(result.status, 'research-started');
+  assert.equal(result.status, 'state-advanced');
   assert.equal(dispatched.length, 1);
   assert.equal(dispatched[0].workflowFileName, 'autodev-research.lock.yml');
   assert.equal(dispatched[0].ref, 'main');

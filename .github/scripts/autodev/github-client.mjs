@@ -177,6 +177,28 @@ export class GitHubClient {
     return response.data;
   }
 
+  async compareCommits(base, head) {
+    // Used to validate what a dispatched producer workflow actually committed:
+    // the callback echoes the pre-dispatch SHA, so the orchestrator re-resolves
+    // the live head and diffs it against the SHA recorded when the state started.
+    assertNonEmptyString(base, 'base');
+    assertNonEmptyString(head, 'head');
+    const range = `${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
+    const response = await this.request(
+      'GET',
+      this.repositoryPath(`/compare/${range}`),
+    );
+    if (response.data === null || typeof response.data !== 'object' || Array.isArray(response.data)) {
+      throw new GitHubApiError({
+        method: 'GET',
+        path: this.repositoryPath(`/compare/${range}`),
+        status: 502,
+        responseBody: { message: 'Expected a commit comparison object.' },
+      });
+    }
+    return response.data;
+  }
+
   async updateRef(ref, sha, { force = false } = {}) {
     assertNonEmptyString(ref, 'ref');
     assertNonEmptyString(sha, 'sha');

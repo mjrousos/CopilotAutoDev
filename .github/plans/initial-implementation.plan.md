@@ -42,7 +42,7 @@ The implementation will be delivered in independently usable milestones. Each mi
       dispatcher.mjs
       handlers/
         initialization.mjs
-        research.mjs
+        advance.mjs
         shared.mjs
       validation.mjs
       reconcile.mjs
@@ -56,7 +56,8 @@ The implementation will be delivered in independently usable milestones. Each mi
         validation.test.mjs
         dispatcher.test.mjs
         initialization.test.mjs
-        research.test.mjs
+        advance.test.mjs
+        workflows.test.mjs
         reconcile.test.mjs
   workflows/
     autodev-orchestrator.yml
@@ -209,39 +210,46 @@ Each AI-assisted state's behavior lives entirely in its Agentic Workflow `.md` s
 5. [x] Authenticate and parse Research callback comments, then stop cleanly at the deferred Design boundary. Design-state processing will validate the branch, SHA, changed files, and artifact in Milestone 4.
 6. [x] Add integration-style tests using mocked GitHub API responses and assert that the compiled workflow and its callback safe output are committed.
 
-**Known limitation:** the safe-output job commits after the agent finishes, so the callback echoes the pre-dispatch `head_sha`. Research -> Design does not require SHA equality for a producer state, so this passes; when Design lands, the orchestrator must re-resolve the actual branch head on callback rather than trusting the reported SHA.
+**Known limitation:** the safe-output job commits after the agent finishes, so the callback echoes the pre-dispatch `head_sha`. Research -> Design does not require SHA equality for a producer state, so this passes; the Design handler (Milestone 4) re-resolves the actual branch head on callback rather than trusting the reported SHA.
 
 **Completion criteria**
 
 - [x] A labeled test issue progresses from Initialization through a real Research Agentic Workflow run.
 - [x] Research commits its artifact to the shared issue branch's tracking pull request.
 - [x] A valid callback is recognized as a Design request without invoking an unimplemented Design handler.
-- [ ] Design validation rejects invalid callbacks or out-of-scope changes before writing canonical Design state.
+- [x] Design validation rejects invalid callbacks or out-of-scope changes before writing canonical Design state (Milestone 4).
 
-## Milestone 4: Add Design and SecurityReview, including feedback loops
+## Milestone 4: Add Design and SecurityReview, including feedback loops - Implemented
 
-1. Implement the Design handler that validates the completed Research run, branch head, changes since the Research run's starting SHA, and required Research artifact before recording or launching Design.
-2. Author `autodev-design.md` (compiled to `autodev-design.lock.yml`):
-   - Consume the issue, Research artifact, and any prior security or human feedback.
+**Status:** Implementation complete as of 2026-07-27. The Research -> Design -> SecurityReview path and the Design -> Research / SecurityReview -> Design feedback loops are wired and unit-tested with mocked GitHub responses. Live end-to-end validation of the new workflows on a real issue is pending (tracked in Milestone 8).
+
+1. [x] Implement the producer-advance handler that validates the completed source run, branch head, changes since the source run's starting SHA, and required source artifact before recording or launching the target. Shared across Research/Design/SecurityReview in `handlers/advance.mjs`; the Design handler is this launcher reached with a Research canonical source.
+2. [x] Author `autodev-design.md` (compiled to `autodev-design.lock.yml`):
+   - Mirror the structure of [autodev-research.md](../workflows/autodev-research.md) for the prompt and safe outputs.
+   - Consume the issue, Research artifact, and any prior security or human feedback (passed as the untrusted `feedback` dispatch input).
    - Write only the issue Design artifact.
    - Request Research when specific missing research is identified; otherwise request SecurityReview.
-   - Persist the selected `nextState` and rationale in a machine-readable block in the committed Design artifact so reconciliation does not depend solely on the callback.
-3. Author `autodev-security-review.md` (compiled to `autodev-security-review.lock.yml`):
+   - Persist the selected `nextState` and rationale in a machine-readable `autodev-decision:v1` block in the committed Design artifact so reconciliation does not depend solely on the callback.
+3. [x] Author `autodev-security-review.md` (compiled to `autodev-security-review.lock.yml`):
+   - Mirror the structure of [autodev-research.md](../workflows/autodev-research.md) for the prompt and safe outputs.
    - Consume the Design artifact and relevant code.
    - Produce a threat model and security-review artifact.
    - Request Design when blocking findings require changes; otherwise request HumanPlanReview.
-   - Persist the selected `nextState` and rationale in a machine-readable block in the committed SecurityReview artifact.
-4. Reuse the shared workflow-dispatch launcher and callback validator with state-specific policies rather than duplicating orchestration logic.
-5. Validate allowed file paths and required artifacts independently for each state by diffing the preceding canonical `headSha` against the callback `headSha`.
-6. Increment attempts on each re-entry and include prior feedback in prompts.
-7. Protect against stale callbacks from previous Design or SecurityReview attempts.
-8. Add tests for Research <-> Design and Design <-> SecurityReview loops, stale attempts, missing artifacts, and invalid requested transitions.
+   - Persist the selected `nextState` and rationale in a machine-readable `autodev-decision:v1` block in the committed SecurityReview artifact.
+4. [x] Reuse the shared workflow-dispatch launcher and callback validator with state-specific policies rather than duplicating orchestration logic. `advanceState` derives the source from canonical state and the target from the callback's `nextState`, so one handler serves the forward path and both feedback loops.
+5. [x] Validate allowed file paths and required artifacts independently for each state by diffing the SHA recorded when the source launched against the re-resolved live branch head. Because a producer's safe output commits after it posts the callback, the callback SHA is stale; the orchestrator re-resolves the live head and diffs it via `github-client.compareCommits` rather than trusting the callback SHA.
+6. [x] Increment attempts on each re-entry (the target's attempt is the prior attempt for that state plus one) and pass the source's rationale as the `feedback` input included in prompts.
+7. [x] Protect against stale callbacks from previous Design or SecurityReview attempts: a callback whose declared source is not the live canonical state is ignored, and the transition validator rejects attempt/ref/state mismatches.
+8. [x] Add tests for Research <-> Design and Design <-> SecurityReview loops, stale attempts, missing artifacts, disallowed changes, and invalid requested transitions (`advance.test.mjs`, `workflows.test.mjs`).
 
 **Completion criteria**
 
-- The POC can traverse the complete Research -> Design -> SecurityReview path.
-- Design can return to Research and SecurityReview can return to Design without accepting stale callbacks.
-- Every loop produces a new append-only canonical sequence and preserves prior artifacts/history.
+- [x] The POC can traverse the complete Research -> Design -> SecurityReview path (unit-verified end to end with mocked GitHub responses).
+- [x] Design can return to Research and SecurityReview can return to Design without accepting stale callbacks.
+- [x] Every loop produces a new append-only canonical sequence and preserves prior artifacts/history.
+- [ ] Live validation of the Design and SecurityReview workflows on a real issue (deferred to Milestone 8).
+
+**Deferred hardening (to Milestone 7, reconciliation):** In the normal flow the orchestrator trusts the callback's `nextState` after confirming the source committed its artifact within policy; it does not yet re-read the committed `autodev-decision:v1` block to confirm the callback matches it. Cross-checking the callback against the persisted decision belongs with reconciliation, which already reads that block to recover a lost callback, and enforcing it during normal flow before the workflows are live-validated would make a healthy run depend on exact agent artifact formatting. When Milestone 7 lands, verify the callback's `state`/`nextState` equal the decision block committed at the resolved head.
 
 ## Milestone 5: Implement HumanPlanReview, Implementation, and deterministic PR creation
 
