@@ -370,6 +370,31 @@ test('advanceState rejects a producer whose head diverged from the recorded SHA'
   );
 });
 
+test('advanceState rejects a diff that hits the compare file ceiling', async () => {
+  // The compare endpoint caps files at 300; a capped list may be truncated, so
+  // out-of-policy files could hide beyond it.
+  const files = Array.from({ length: 300 }, (_unused, index) => (
+    index === 0 ? RESEARCH_ARTIFACT : `src/file-${index}.js`
+  ));
+  const { github } = makeGitHub({
+    comments: [
+      taskComment({ sequence: 1, state: STATES.INITIALIZATION, headSha: SHA_INIT }),
+      taskComment({ sequence: 2, state: STATES.RESEARCH, headSha: SHA_INIT }),
+    ],
+    liveHeadSha: SHA_RESEARCH,
+    compareFiles: files,
+  });
+
+  await assert.rejects(
+    advanceState({
+      github,
+      issueNumber: ISSUE,
+      result: result({ state: STATES.RESEARCH, nextState: STATES.DESIGN, headSha: SHA_INIT }),
+    }),
+    (error) => error instanceof ContractValidationError && error.code === 'diff-too-large',
+  );
+});
+
 test('advanceState launches SecurityReview after Design', async () => {
   const { github, dispatched } = makeGitHub({
     comments: [

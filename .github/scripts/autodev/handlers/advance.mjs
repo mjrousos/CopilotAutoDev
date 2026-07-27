@@ -33,6 +33,12 @@ function isProducerState(state) {
   return PRODUCER_STATES.includes(state);
 }
 
+// The GitHub compare endpoint returns at most 300 file entries. A diff at that
+// size is likely truncated, so the change-policy check below could miss files
+// beyond the cap; a legitimate producer only writes its single artifact, so a
+// capped diff is treated as unvalidatable rather than trusted.
+const MAX_COMPARISON_FILES = 300;
+
 // The most recent attempt recorded for a state, or 0 if it has never run. A
 // re-entry (feedback loop) launches the target at prior attempt + 1.
 function priorAttemptForState(history, state) {
@@ -140,6 +146,16 @@ export async function advanceState({
       );
     }
     const files = Array.isArray(comparison?.files) ? comparison.files : [];
+    // The compare endpoint caps files at 300; a diff that hits the cap may be
+    // truncated, so the change-policy check could miss out-of-policy files
+    // beyond it. Reject rather than validate a partial list.
+    if (files.length >= MAX_COMPARISON_FILES) {
+      throw new ContractValidationError(
+        'diff-too-large',
+        `${sourceState} changed at least ${MAX_COMPARISON_FILES} files, which exceeds the number `
+          + 'the orchestrator can validate against its change policy.',
+      );
+    }
     // A renamed file changes both its new path and its previous_filename, so
     // both are subject to the source's change policy; extracting only filename
     // would let a rename move a disallowed control file onto the artifact path.
